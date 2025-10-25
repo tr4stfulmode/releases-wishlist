@@ -5,6 +5,9 @@ import 'package:app_wishlist/widgets/wish_item_card.dart';
 import 'package:app_wishlist/services/auth_service.dart';
 import 'package:app_wishlist/services/firestore_service.dart';
 import 'package:app_wishlist/services/notification_service.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:permission_handler/permission_handler.dart';
 
 class WishlistPage extends StatefulWidget {
   const WishlistPage({super.key});
@@ -123,6 +126,7 @@ class _WishlistPageState extends State<WishlistPage> {
     final priceController = TextEditingController();
     final imageUrlController = TextEditingController();
     int priority = 3;
+    XFile? _selectedImage;
 
     final List<String> defaultImages = [
       'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400',
@@ -151,6 +155,117 @@ class _WishlistPageState extends State<WishlistPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Превью выбранного изображения
+                    if (_selectedImage != null)
+                      Container(
+                        height: 150,
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          image: DecorationImage(
+                            image: FileImage(File(_selectedImage!.path)),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        child: Stack(
+                          children: [
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: CircleAvatar(
+                                backgroundColor: Colors.black54,
+                                radius: 16,
+                                child: IconButton(
+                                  icon: const Icon(Icons.close, size: 16),
+                                  color: Colors.white,
+                                  onPressed: () {
+                                    setDialogState(() {
+                                      _selectedImage = null;
+                                      imageUrlController.clear();
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (imageUrlController.text.isNotEmpty)
+                      Container(
+                        height: 150,
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          image: DecorationImage(
+                            image: NetworkImage(imageUrlController.text),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+
+                    // Кнопки выбора изображения
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.photo_library),
+                            label: const Text('Галерея'),
+                            onPressed: () async {
+                              final ImagePicker picker = ImagePicker();
+                              // Запрашиваем разрешение
+                              final status = await Permission.photos.request();
+                              if (status.isGranted) {
+                                final XFile? image = await picker.pickImage(
+                                  source: ImageSource.gallery,
+                                  maxWidth: 800,
+                                  maxHeight: 800,
+                                  imageQuality: 80,
+                                );
+                                if (image != null) {
+                                  setDialogState(() {
+                                    _selectedImage = image;
+                                    imageUrlController.clear();
+                                  });
+                                }
+                              } else {
+                                _showErrorSnackBar('Разрешение на доступ к галерее не предоставлено');
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.camera_alt),
+                            label: const Text('Камера'),
+                            onPressed: () async {
+                              final ImagePicker picker = ImagePicker();
+                              final status = await Permission.camera.request();
+                              if (status.isGranted) {
+                                final XFile? image = await picker.pickImage(
+                                  source: ImageSource.camera,
+                                  maxWidth: 800,
+                                  maxHeight: 800,
+                                  imageQuality: 80,
+                                );
+                                if (image != null) {
+                                  setDialogState(() {
+                                    _selectedImage = image;
+                                    imageUrlController.clear();
+                                  });
+                                }
+                              } else {
+                                _showErrorSnackBar('Разрешение на камеру не предоставлено');
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
                     TextFormField(
                       controller: titleController,
                       decoration: const InputDecoration(
@@ -181,8 +296,7 @@ class _WishlistPageState extends State<WishlistPage> {
                         hintText: '0.00',
                       ),
                       style: const TextStyle(fontFamily: 'Poppins'),
-                      keyboardType:
-                          TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: TextInputType.numberWithOptions(decimal: true),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -190,19 +304,26 @@ class _WishlistPageState extends State<WishlistPage> {
                       decoration: InputDecoration(
                         labelText: 'Ссылка на изображение (опционально)',
                         border: const OutlineInputBorder(),
-                        hintText: 'Оставьте пустым для случайного изображения',
+                        hintText: 'Или введите ссылку на изображение',
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.shuffle),
                           onPressed: () {
-                            final randomIndex =
-                                (priority - 1) % defaultImages.length;
-                            imageUrlController.text =
-                                defaultImages[randomIndex];
-                            setDialogState(() {});
+                            final randomIndex = (priority - 1) % defaultImages.length;
+                            setDialogState(() {
+                              imageUrlController.text = defaultImages[randomIndex];
+                              _selectedImage = null;
+                            });
                           },
                         ),
                       ),
                       style: const TextStyle(fontFamily: 'Poppins'),
+                      onChanged: (value) {
+                        if (value.isNotEmpty) {
+                          setDialogState(() {
+                            _selectedImage = null;
+                          });
+                        }
+                      },
                     ),
                     const SizedBox(height: 16),
                     Column(
@@ -228,9 +349,7 @@ class _WishlistPageState extends State<WishlistPage> {
                                 });
                               },
                               icon: Icon(
-                                index < priority
-                                    ? Icons.star
-                                    : Icons.star_border,
+                                index < priority ? Icons.star : Icons.star_border,
                                 color: Theme.of(context).colorScheme.primary,
                                 size: 32,
                               ),
@@ -259,10 +378,7 @@ class _WishlistPageState extends State<WishlistPage> {
                     'Отмена',
                     style: TextStyle(
                       fontFamily: 'Poppins',
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withOpacity(0.6),
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                     ),
                   ),
                 ),
@@ -285,13 +401,29 @@ class _WishlistPageState extends State<WishlistPage> {
                     }
 
                     try {
+                      String imageUrl;
+
+                      // Если выбрано изображение из галереи
+                      if (_selectedImage != null) {
+                        // Временное решение - используем путь к файлу
+                        // В будущем можно загрузить в Firebase Storage
+                        imageUrl = _selectedImage!.path;
+                        _showSuccessSnackBar('Локальное изображение выбрано (путь: ${_selectedImage!.path})');
+                      }
+                      // Если введена ссылка
+                      else if (imageUrlController.text.isNotEmpty) {
+                        imageUrl = imageUrlController.text.trim();
+                      }
+                      // Если ничего не выбрано - случайное изображение
+                      else {
+                        imageUrl = defaultImages[priority - 1];
+                      }
+
                       final newWish = WishItem.createNew(
                         title: titleController.text.trim(),
                         description: descriptionController.text.trim(),
                         price: price,
-                        imageUrl: imageUrlController.text.trim().isEmpty
-                            ? defaultImages[priority - 1]
-                            : imageUrlController.text.trim(),
+                        imageUrl: imageUrl,
                         priority: priority,
                         addedBy: _auth.currentUser?.email,
                       );
@@ -299,8 +431,7 @@ class _WishlistPageState extends State<WishlistPage> {
                       await _firestoreService.addWishItem(newWish);
 
                       Navigator.pop(context);
-                      _showSuccessSnackBar(
-                          '«${newWish.title}» добавлен в вишлист!');
+                      _showSuccessSnackBar('«${newWish.title}» добавлен в вишлист!');
                     } catch (e) {
                       _showErrorSnackBar('Ошибка при добавлении: $e');
                     }
