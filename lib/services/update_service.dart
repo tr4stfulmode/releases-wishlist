@@ -5,12 +5,13 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/material.dart';
 
 class UpdateService {
   // ЗАМЕНИТЕ на ваш реальный URL!
   static const String repoUrl =
       'https://api.github.com/tr4stfulmode/app-wishlist/releases/latest';
-
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   static Future<void> checkAndUpdate() async {
     try {
       final response = await http.get(Uri.parse(repoUrl));

@@ -29,8 +29,8 @@ class _WishlistPageState extends State<WishlistPage> {
   }
 
   @override
-   void dispose() {
-    // Отписываемся от слушателей при закрытии страницы
+  void dispose() {
+    // УДАЛИЛИ NotificationService.dispose()
     super.dispose();
   }
 
@@ -65,16 +65,21 @@ class _WishlistPageState extends State<WishlistPage> {
             item.addedBy!,
           );
 
+          // Также показываем SnackBar уведомление в приложении
+          _showNewItemSnackBar(item.title, item.addedBy!);
+
           // Помечаем как уведомленный
           _notifiedItems.add(item.id);
 
-          print('Показано уведомление для предмета: ${item.title}');
+          print('✅ Показано уведомление для предмета: ${item.title}');
         }
       }
     }
   }
 
   void _showNewItemSnackBar(String itemTitle, String addedBy) {
+    final userName = addedBy.split('@').first;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Column(
@@ -86,18 +91,22 @@ class _WishlistPageState extends State<WishlistPage> {
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
+                fontFamily: 'Poppins',
               ),
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
-              '$addedBy добавил(а): "$itemTitle"',
-              style: TextStyle(color: Colors.white),
+              '$userName добавил(а): "$itemTitle"',
+              style: TextStyle(
+                color: Colors.white,
+                fontFamily: 'Poppins',
+              ),
             ),
           ],
         ),
         backgroundColor: Colors.blue,
         behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 4),
+        duration: const Duration(seconds: 4),
         action: SnackBarAction(
           label: 'OK',
           textColor: Colors.white,
@@ -305,11 +314,6 @@ class _WishlistPageState extends State<WishlistPage> {
     );
   }
 
-
-
-// Добавьте новый метод для SnackBar уведомлений
-
-
   void _togglePurchased(WishItem item) async {
     try {
       await _firestoreService.togglePurchased(item.id, !item.isPurchased);
@@ -399,7 +403,7 @@ class _WishlistPageState extends State<WishlistPage> {
             return Center(
               child: Text(
                 'Ошибка загрузки: ${snapshot.error}',
-                style: TextStyle(
+                style: const TextStyle(
                   fontFamily: 'Poppins',
                   color: Colors.red,
                 ),
