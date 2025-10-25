@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 class UpdateService {
   // ЗАМЕНИТЕ на ваш реальный URL!
   static const String repoUrl =
-      'https://api.github.com/tr4stfulmode/app-wishlist/releases/latest';
+      'https://api.github.com/tr4stfulmode/releases-wishlist/releases/latest';
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   static Future<void> checkAndUpdate() async {
     try {

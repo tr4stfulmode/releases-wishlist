@@ -54,11 +54,10 @@ class _WishlistPageState extends State<WishlistPage> {
       if (item.addedBy != null &&
           item.addedBy != currentUserEmail &&
           !_notifiedItems.contains(item.id)) {
-
         // Проверяем, что предмет новый (создан не более 2 минут назад)
-        final twoMinutesAgo = DateTime.now().subtract(const Duration(minutes: 2));
+        final twoMinutesAgo =
+            DateTime.now().subtract(const Duration(minutes: 2));
         if (item.createdAt.isAfter(twoMinutesAgo)) {
-
           // Показываем СИСТЕМНОЕ уведомление
           NotificationService.showNewItemNotification(
             item.title,
@@ -182,7 +181,8 @@ class _WishlistPageState extends State<WishlistPage> {
                         hintText: '0.00',
                       ),
                       style: const TextStyle(fontFamily: 'Poppins'),
-                      keyboardType: TextInputType.numberWithOptions(decimal: true),
+                      keyboardType:
+                          TextInputType.numberWithOptions(decimal: true),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -194,8 +194,10 @@ class _WishlistPageState extends State<WishlistPage> {
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.shuffle),
                           onPressed: () {
-                            final randomIndex = (priority - 1) % defaultImages.length;
-                            imageUrlController.text = defaultImages[randomIndex];
+                            final randomIndex =
+                                (priority - 1) % defaultImages.length;
+                            imageUrlController.text =
+                                defaultImages[randomIndex];
                             setDialogState(() {});
                           },
                         ),
@@ -226,7 +228,9 @@ class _WishlistPageState extends State<WishlistPage> {
                                 });
                               },
                               icon: Icon(
-                                index < priority ? Icons.star : Icons.star_border,
+                                index < priority
+                                    ? Icons.star
+                                    : Icons.star_border,
                                 color: Theme.of(context).colorScheme.primary,
                                 size: 32,
                               ),
@@ -255,7 +259,10 @@ class _WishlistPageState extends State<WishlistPage> {
                     'Отмена',
                     style: TextStyle(
                       fontFamily: 'Poppins',
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.6),
                     ),
                   ),
                 ),
@@ -292,8 +299,8 @@ class _WishlistPageState extends State<WishlistPage> {
                       await _firestoreService.addWishItem(newWish);
 
                       Navigator.pop(context);
-                      _showSuccessSnackBar('«${newWish.title}» добавлен в вишлист!');
-
+                      _showSuccessSnackBar(
+                          '«${newWish.title}» добавлен в вишлист!');
                     } catch (e) {
                       _showErrorSnackBar('Ошибка при добавлении: $e');
                     }
@@ -466,7 +473,10 @@ class _WishlistPageState extends State<WishlistPage> {
                         style: TextStyle(
                           fontFamily: 'Poppins',
                           fontSize: 14,
-                          color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onPrimaryContainer
+                              .withOpacity(0.8),
                         ),
                       ),
                   ],
@@ -478,18 +488,18 @@ class _WishlistPageState extends State<WishlistPage> {
                 child: wishItems.isEmpty
                     ? const _EmptyState()
                     : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: wishItems.length,
-                  itemBuilder: (context, index) {
-                    final item = wishItems[index];
-                    return WishItemCard(
-                      item: item,
-                      onTap: () => _togglePurchased(item),
-                      onDelete: () => _deleteWishItem(item.id),
-                      showAddedBy: true,
-                    );
-                  },
-                ),
+                        padding: const EdgeInsets.all(16),
+                        itemCount: wishItems.length,
+                        itemBuilder: (context, index) {
+                          final item = wishItems[index];
+                          return WishItemCard(
+                            item: item,
+                            onTap: () => _togglePurchased(item),
+                            onDelete: () => _deleteWishItem(item.id),
+                            showAddedBy: true,
+                          );
+                        },
+                      ),
               ),
             ],
           );
