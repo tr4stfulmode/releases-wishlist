@@ -16,6 +16,12 @@ void main() async {
   await NotificationService.initialize();
 
   runApp(const MyApp());
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    Future.delayed(const Duration(seconds: 3), () {
+      print('🔄 Checking for updates...');
+      UpdateService.checkAndUpdate();
+    });
+  });
 }
 
 class MyApp extends StatelessWidget {
@@ -26,6 +32,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'My Wishlist',
        // ДОБАВЛЯЕМ эту строку
+      navigatorKey: UpdateService.navigatorKey,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,
