@@ -16,45 +16,51 @@ class UpdateService {
   static bool _isChecking = false;
   static bool _updateShown = false;
 
-  static Future<void> checkAndUpdate({bool forceCheck = false}) async {
-    if (_isChecking && !forceCheck) return;
-    _isChecking = true;
-
+  static Future<void> checkAndUpdate() async {
     try {
       print('🔍 Checking for updates...');
-      final response = await http.get(
+
+      final client = http.Client();
+      final response = await client.get(
         Uri.parse(repoUrl),
-        headers: {'User-Agent': 'Wishlist-App'},
-      );
+        headers: {
+          'User-Agent': 'Wishlist-App/1.0',
+          'Accept': 'application/vnd.github.v3+json',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      print('📡 Response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final latestVersion = data['tag_name']?.toString().replaceAll('v', '') ?? '';
         final downloadUrl = _findApkUrl(data);
-        final releaseNotes = data['body'] ?? 'Новое обновление доступно';
-        final isMandatory = _checkIfMandatory(data);
+        final releaseNotes = data['body'] ?? 'Доступно обновление';
+        final isMandatory = _checkIfMandatory(data); // Добавляем эту строку
 
-        print('📦 Latest: $latestVersion, URL: ${downloadUrl.isNotEmpty}');
+        print('📦 Latest version: $latestVersion');
+        print('🔗 Download URL: ${downloadUrl.isNotEmpty ? "Available" : "Not found"}');
 
         if (await _shouldUpdate(latestVersion) && downloadUrl.isNotEmpty) {
-          if (!_updateShown || forceCheck) {
-            _updateShown = true;
-            _showUpdateDialog(downloadUrl, releaseNotes, isMandatory);
-          }
+          print('🎯 Update available! Showing dialog...');
+          _showUpdateDialog(downloadUrl, releaseNotes, isMandatory); // Исправленный вызов
         } else {
           print('✅ App is up to date');
-          if (forceCheck) {
-            _showUpToDateSnackBar();
-          }
         }
       } else {
         print('❌ GitHub API error: ${response.statusCode}');
       }
+
+      client.close();
     } catch (e) {
       print('❌ Update check failed: $e');
-    } finally {
-      _isChecking = false;
     }
+  }
+
+// Добавьте этот метод если его нет
+  static bool _checkIfMandatory(Map<String, dynamic> data) {
+    final notes = (data['body'] ?? '').toLowerCase();
+    return notes.contains('[mandatory]') || notes.contains('[critical]');
   }
 
   static String _findApkUrl(Map<String, dynamic> data) {
@@ -68,10 +74,6 @@ class UpdateService {
     return '';
   }
 
-  static bool _checkIfMandatory(Map<String, dynamic> data) {
-    final notes = (data['body'] ?? '').toLowerCase();
-    return notes.contains('[mandatory]') || notes.contains('[critical]');
-  }
 
   static Future<bool> _shouldUpdate(String latestVersion) async {
     final packageInfo = await PackageInfo.fromPlatform();
@@ -257,8 +259,6 @@ class UpdateService {
     );
   }
 
-  // Метод для ручной проверки (можно вызвать из кнопки)
-  static Future<void> manualCheck() async {
-    await checkAndUpdate(forceCheck: true);
-  }
+
+
 }

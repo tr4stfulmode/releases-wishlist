@@ -1,4 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
     <application
         android:label="My Wishlist"
         android:name="${applicationName}"
@@ -32,10 +38,7 @@
             android:value="2" />
 
     </application>
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
+
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
          https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
