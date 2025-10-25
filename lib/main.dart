@@ -25,7 +25,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'My Wishlist',
-      navigatorKey: UpdateService.navigatorKey, // ДОБАВЛЯЕМ эту строку
+       // ДОБАВЛЯЕМ эту строку
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,

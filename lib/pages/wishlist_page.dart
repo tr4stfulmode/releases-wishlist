@@ -31,7 +31,6 @@ class _WishlistPageState extends State<WishlistPage> {
   @override
    void dispose() {
     // Отписываемся от слушателей при закрытии страницы
-    NotificationService.dispose();
     super.dispose();
   }
 
@@ -66,21 +65,16 @@ class _WishlistPageState extends State<WishlistPage> {
             item.addedBy!,
           );
 
-          // Также показываем SnackBar уведомление в приложении
-          _showNewItemSnackBar(item.title, item.addedBy!);
-
           // Помечаем как уведомленный
           _notifiedItems.add(item.id);
 
-          print('✅ Показано уведомление для предмета: ${item.title}');
+          print('Показано уведомление для предмета: ${item.title}');
         }
       }
     }
   }
 
   void _showNewItemSnackBar(String itemTitle, String addedBy) {
-    final userName = addedBy.split('@').first;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Column(
@@ -92,16 +86,12 @@ class _WishlistPageState extends State<WishlistPage> {
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
-                fontFamily: 'Poppins',
               ),
             ),
             SizedBox(height: 4),
             Text(
-              '$userName добавил(а): "$itemTitle"',
-              style: TextStyle(
-                color: Colors.white,
-                fontFamily: 'Poppins',
-              ),
+              '$addedBy добавил(а): "$itemTitle"',
+              style: TextStyle(color: Colors.white),
             ),
           ],
         ),
@@ -315,69 +305,10 @@ class _WishlistPageState extends State<WishlistPage> {
     );
   }
 
-  void _checkForNewItems(List<WishItem> items) {
-    final currentUserEmail = _auth.currentUser?.email;
 
-    for (final item in items) {
-      // Если предмет добавлен другим пользователем и мы еще не уведомляли о нем
-      if (item.addedBy != null &&
-          item.addedBy != currentUserEmail &&
-          !_notifiedItems.contains(item.id)) {
-
-        // Проверяем, что предмет новый (создан не более 2 минут назад)
-        final twoMinutesAgo = DateTime.now().subtract(const Duration(minutes: 2));
-        if (item.createdAt.isAfter(twoMinutesAgo)) {
-
-          // Показываем СИСТЕМНОЕ уведомление
-          NotificationService.showNewItemNotification(
-            item.title,
-            item.addedBy!,
-          );
-
-          // Помечаем как уведомленный
-          _notifiedItems.add(item.id);
-
-          print('Показано уведомление для предмета: ${item.title}');
-        }
-      }
-    }
-  }
 
 // Добавьте новый метод для SnackBar уведомлений
-  void _showNewItemSnackBar(String itemTitle, String addedBy) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '🎁 Новый предмет!',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              '$addedBy добавил(а): "$itemTitle"',
-              style: TextStyle(color: Colors.white),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.blue,
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 4),
-        action: SnackBarAction(
-          label: 'OK',
-          textColor: Colors.white,
-          onPressed: () {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          },
-        ),
-      ),
-    );
-  }
+
 
   void _togglePurchased(WishItem item) async {
     try {
