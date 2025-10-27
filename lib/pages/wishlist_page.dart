@@ -188,6 +188,25 @@ class _WishlistPageState extends State<WishlistPage> {
                                 ),
                               ),
                             ),
+                            Positioned(
+                              bottom: 8,
+                              left: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Локальное изображение',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontFamily: 'Poppins',
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       )
@@ -214,7 +233,6 @@ class _WishlistPageState extends State<WishlistPage> {
                             label: const Text('Галерея'),
                             onPressed: () async {
                               final ImagePicker picker = ImagePicker();
-                              // Запрашиваем разрешение
                               final status = await Permission.photos.request();
                               if (status.isGranted) {
                                 final XFile? image = await picker.pickImage(
@@ -325,6 +343,29 @@ class _WishlistPageState extends State<WishlistPage> {
                         }
                       },
                     ),
+
+                    // Информация о локальных изображениях
+                    if (_selectedImage != null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(top: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue[50],
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue[100]!),
+                        ),
+                        child: Text(
+                          '⚠️ Локальное изображение будет видно только вам. Для общего доступа используйте ссылку.',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 12,
+                            color: Colors.blue[800],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+
                     const SizedBox(height: 16),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -403,12 +444,12 @@ class _WishlistPageState extends State<WishlistPage> {
                     try {
                       String imageUrl;
 
-                      // Если выбрано изображение из галереи
+                      // Если выбрано изображение из галереи/камеры
                       if (_selectedImage != null) {
-                        // Временное решение - используем путь к файлу
-                        // В будущем можно загрузить в Firebase Storage
-                        imageUrl = _selectedImage!.path;
-                        _showSuccessSnackBar('Локальное изображение выбрано (путь: ${_selectedImage!.path})');
+                        // Используем случайное изображение вместо локального пути
+                        // (локальные пути не работают для других пользователей)
+                        imageUrl = defaultImages[priority - 1];
+                        _showInfoSnackBar('Локальное изображение заменено на стандартное для совместимости');
                       }
                       // Если введена ссылка
                       else if (imageUrlController.text.isNotEmpty) {
@@ -449,6 +490,20 @@ class _WishlistPageState extends State<WishlistPage> {
           },
         );
       },
+    );
+  }
+
+// Добавьте этот метод для информационных сообщений
+  void _showInfoSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(fontFamily: 'Poppins'),
+        ),
+        backgroundColor: Colors.blue,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
