@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -31,12 +32,16 @@ class SimpleUpdateService {
 
         print('🎯 SIMPLE: Current: $currentVersion, Latest: $latestVersion');
         print('🎯 SIMPLE: Download URL: ${downloadUrl.isNotEmpty}');
+        final shouldUpdate = _shouldUpdate(currentVersion, latestVersion);
+        print('🎯 SIMPLE: Should update: $shouldUpdate');
 
-        if (currentVersion != latestVersion && downloadUrl.isNotEmpty) {
+        if (shouldUpdate && downloadUrl.isNotEmpty) {
           print('🎯 SIMPLE: ✅ UPDATE AVAILABLE! Showing dialog...');
           _showUpdateDialog(downloadUrl, releaseNotes, isMandatory);
         } else {
-          print('🎯 SIMPLE: ❌ No update needed');
+          print('🎯 SIMPLE: ✅ App is up to date - no update needed');
+          // Можно показать сообщение что версия актуальна
+          _showUpToDateMessage();
         }
       }
     } catch (e) {
@@ -59,6 +64,42 @@ class SimpleUpdateService {
     final notes = (data['body'] ?? '').toLowerCase();
     return notes.contains('[mandatory]') || notes.contains('[critical]');
   }
+  static bool _shouldUpdate(String currentVersion, String latestVersion) {
+    print('🔍 Comparing versions: "$currentVersion" vs "$latestVersion"');
+
+    // Если версии полностью одинаковые - не обновляем
+    if (currentVersion == latestVersion) {
+      print('🔍 Versions are exactly the same - no update');
+      return false;
+    }
+
+    try {
+      final currentParts = currentVersion.split('.').map(int.parse).toList();
+      final latestParts = latestVersion.split('.').map(int.parse).toList();
+
+      // Сравниваем по частям: major.minor.patch
+      for (int i = 0; i < math.max(currentParts.length, latestParts.length); i++) {
+        final current = i < currentParts.length ? currentParts[i] : 0;
+        final latest = i < latestParts.length ? latestParts[i] : 0;
+
+        if (latest > current) {
+          print('🔍 New version is higher - update needed');
+          return true;
+        } else if (latest < current) {
+          print('🔍 Current version is higher - no update');
+          return false;
+        }
+        // Если равны - переходим к следующей части
+      }
+
+      print('🔍 Versions are equal - no update');
+      return false;
+    } catch (e) {
+      print('🔍 Error comparing versions: $e');
+      // В случае ошибки лучше не предлагать обновление
+      return false;
+    }
+  }
 
   static void _showUpdateDialog(String downloadUrl, String releaseNotes, bool isMandatory) {
     final context = navigatorKey.currentContext;
@@ -80,6 +121,19 @@ class SimpleUpdateService {
           isMandatory: isMandatory,
         );
       },
+    );
+  }
+  static void _showUpToDateMessage() {
+    final context = navigatorKey.currentContext;
+    if (context == null) return;
+
+    // Показываем snackbar вместо диалога
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('✅ Приложение обновлено до последней версии'),
+        duration: Duration(seconds: 2),
+        backgroundColor: Colors.green,
+      ),
     );
   }
 }
