@@ -5,7 +5,7 @@ import 'firebase_options.dart';
 import 'pages/LoginPage.dart';
 import 'pages/wishlist_page.dart';
 import 'services/notification_service.dart';
-import 'services/update_service.dart'; // ДОБАВЛЯЕМ эту строку
+import 'services/simple_update_service.dart'; // ИМПОРТИРУЕМ ПРОСТОЙ СЕРВИС
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,12 +16,6 @@ void main() async {
   await NotificationService.initialize();
 
   runApp(const MyApp());
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    Future.delayed(const Duration(seconds: 3), () {
-      print('🔄 Checking for updates...');
-      UpdateService.checkAndUpdate();
-    });
-  });
 }
 
 class MyApp extends StatelessWidget {
@@ -31,8 +25,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'My Wishlist',
-       // ДОБАВЛЯЕМ эту строку
-      navigatorKey: UpdateService.navigatorKey,
+      navigatorKey: SimpleUpdateService.navigatorKey, // ✅ МЕНЯЕМ НА ПРОСТОЙ СЕРВИС
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,
@@ -44,10 +37,11 @@ class MyApp extends StatelessWidget {
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
-          // ДОБАВЛЯЕМ проверку обновлений
+          // Запускаем проверку обновлений
           WidgetsBinding.instance.addPostFrameCallback((_) {
             Future.delayed(const Duration(seconds: 3), () {
-              UpdateService.checkAndUpdate();
+              print('🚀 MAIN: Starting SIMPLE update check...');
+              SimpleUpdateService.checkForUpdate(); // ✅ МЕНЯЕМ НА ПРОСТОЙ СЕРВИС
             });
           });
 
