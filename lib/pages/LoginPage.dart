@@ -11,10 +11,12 @@ class LoginPage extends StatefulWidget {
 class _LoginScreenState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _displayNameController = TextEditingController(); // Добавляем
   final _formKey = GlobalKey<FormState>();
   final AuthService _authService = AuthService();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _isSignUp = false; // Добавляем переключатель
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
@@ -28,7 +30,6 @@ class _LoginScreenState extends State<LoginPage> {
         _emailController.text,
         _passwordController.text,
       );
-      // Навигация произойдет автоматически через StreamBuilder
     } catch (e) {
       _showErrorDialog(e.toString());
     } finally {
@@ -60,19 +61,34 @@ class _LoginScreenState extends State<LoginPage> {
   }
 
   void _showErrorDialog(String message) {
+    // Упрощаем сообщения об ошибках для пользователя
+    String userFriendlyMessage = message;
+
+    if (message.contains('email-already-in-use')) {
+      userFriendlyMessage = 'Этот email уже используется. Попробуйте войти.';
+    } else if (message.contains('user-not-found')) {
+      userFriendlyMessage = 'Пользователь с таким email не найден.';
+    } else if (message.contains('wrong-password')) {
+      userFriendlyMessage = 'Неверный пароль.';
+    } else if (message.contains('weak-password')) {
+      userFriendlyMessage = 'Пароль слишком слабый. Используйте не менее 6 символов.';
+    } else if (message.contains('invalid-email')) {
+      userFriendlyMessage = 'Неверный формат email.';
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Ошибка',
-          style: TextStyle(
+        title: Text(
+          _isSignUp ? 'Ошибка регистрации' : 'Ошибка входа',
+          style: const TextStyle(
             fontFamily: 'Poppins',
             fontWeight: FontWeight.w600,
           ),
         ),
         content: Text(
-          message,
+          userFriendlyMessage,
           style: const TextStyle(fontFamily: 'Poppins'),
         ),
         actions: [
@@ -92,6 +108,7 @@ class _LoginScreenState extends State<LoginPage> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _displayNameController.dispose();
     super.dispose();
   }
 
@@ -121,6 +138,7 @@ class _LoginScreenState extends State<LoginPage> {
                 const SizedBox(height: 30),
                 _buildAuthButtons(),
                 const SizedBox(height: 20),
+                _buildSwitchAuthMode(), // Добавляем переключатель
               ],
             ),
           ),
@@ -147,9 +165,9 @@ class _LoginScreenState extends State<LoginPage> {
           ),
         ),
         const SizedBox(height: 24),
-        const Text(
-          'Мой Вишлист',
-          style: TextStyle(
+        Text(
+          _isSignUp ? 'Регистрация' : 'Мой Вишлист',
+          style: const TextStyle(
             fontFamily: 'Poppins',
             fontSize: 32,
             fontWeight: FontWeight.w700,
@@ -158,9 +176,11 @@ class _LoginScreenState extends State<LoginPage> {
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Войдите, чтобы управлять своими желаниями',
-          style: TextStyle(
+        Text(
+          _isSignUp
+              ? 'Создайте аккаунт для вашего вишлиста'
+              : 'Войдите, чтобы управлять своими желаниями',
+          style: const TextStyle(
             fontFamily: 'Poppins',
             fontSize: 16,
             color: Colors.white70,
@@ -190,7 +210,49 @@ class _LoginScreenState extends State<LoginPage> {
         key: _formKey,
         child: Column(
           children: [
-            // Email Field с тенью
+            // Поле имени (только для регистрации)
+            if (_isSignUp) ...[
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: TextFormField(
+                  controller: _displayNameController,
+                  decoration: InputDecoration(
+                    labelText: 'Имя',
+                    hintText: 'Введите ваше имя',
+                    prefixIcon: const Icon(Icons.person_rounded, color: Colors.grey),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                  ),
+                  style: const TextStyle(fontSize: 16, fontFamily: 'Poppins'),
+                  validator: _isSignUp ? (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Пожалуйста, введите имя';
+                    }
+                    if (value.length < 2) {
+                      return 'Имя должно быть не менее 2 символов';
+                    }
+                    return null;
+                  } : null,
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+
+            // Email Field
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
@@ -231,7 +293,7 @@ class _LoginScreenState extends State<LoginPage> {
             ),
             const SizedBox(height: 20),
 
-            // Password Field с тенью
+            // Password Field
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
@@ -294,7 +356,7 @@ class _LoginScreenState extends State<LoginPage> {
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: _isLoading ? null : _login,
+            onPressed: _isLoading ? null : (_isSignUp ? _signUp : _login),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white,
               foregroundColor: const Color(0xFF667EEA),
@@ -313,9 +375,9 @@ class _LoginScreenState extends State<LoginPage> {
                 valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF667EEA)),
               ),
             )
-                : const Text(
-              'Войти',
-              style: TextStyle(
+                : Text(
+              _isSignUp ? 'Зарегистрироваться' : 'Войти',
+              style: const TextStyle(
                 fontFamily: 'Poppins',
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -324,30 +386,50 @@ class _LoginScreenState extends State<LoginPage> {
           ),
         ),
         const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: OutlinedButton(
-            onPressed: _isLoading ? null : _signUp,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: Colors.white, width: 2),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+        if (!_isSignUp) // Показываем кнопку регистрации только в режиме входа
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: OutlinedButton(
+              onPressed: _isLoading ? null : () => setState(() => _isSignUp = true),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white, width: 2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-            child: const Text(
-              'Зарегистрироваться',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
+              child: const Text(
+                'Создать аккаунт',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
-        ),
       ],
+    );
+  }
+
+  Widget _buildSwitchAuthMode() {
+    return TextButton(
+      onPressed: _isLoading
+          ? null
+          : () => setState(() => _isSignUp = !_isSignUp),
+      child: Text(
+        _isSignUp
+            ? 'Уже есть аккаунт? Войти'
+            : 'Нет аккаунта? Зарегистрироваться',
+        style: const TextStyle(
+          color: Colors.white,
+          fontFamily: 'Poppins',
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
     );
   }
 }

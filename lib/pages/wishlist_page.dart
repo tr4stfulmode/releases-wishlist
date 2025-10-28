@@ -1,3 +1,4 @@
+import 'package:app_wishlist/pages/wishlist_manager_page.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:app_wishlist/models/wish_item.dart';
@@ -8,6 +9,7 @@ import 'package:app_wishlist/services/notification_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:app_wishlist/pages/wish_item_detail_page.dart';
 
 class WishlistPage extends StatefulWidget {
   const WishlistPage({super.key});
@@ -557,6 +559,18 @@ class _WishlistPageState extends State<WishlistPage> {
     await _authService.signOut();
   }
 
+  void _openItemDetail(BuildContext context, WishItem item) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => WishItemDetailPage(
+          item: item,
+          firestoreService: _firestoreService,
+        ),
+      ),
+    );
+  }
+
   double _calculateTotalPrice(List<WishItem> items) {
     return items.fold(0.0, (sum, item) => sum + item.price);
   }
@@ -569,6 +583,7 @@ class _WishlistPageState extends State<WishlistPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
+      // В AppBar добавляем кнопку управления вишлистами
       appBar: AppBar(
         title: const Text(
           'Общий Вишлист',
@@ -583,6 +598,14 @@ class _WishlistPageState extends State<WishlistPage> {
         centerTitle: true,
         actions: [
           IconButton(
+            icon: const Icon(Icons.group),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const WishlistManagerPage()),
+            ),
+            tooltip: 'Управление вишлистами',
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _logout,
             tooltip: 'Выйти',
@@ -590,7 +613,7 @@ class _WishlistPageState extends State<WishlistPage> {
         ],
       ),
       body: StreamBuilder<List<WishItem>>(
-        stream: _firestoreService.getWishItems(),
+        stream: _firestoreService.getWishItemsWithAccess(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
@@ -680,7 +703,7 @@ class _WishlistPageState extends State<WishlistPage> {
                           final item = wishItems[index];
                           return WishItemCard(
                             item: item,
-                            onTap: () => _togglePurchased(item),
+                            onTap: () => _openItemDetail(context, item),
                             onDelete: () => _deleteWishItem(item.id),
                             showAddedBy: true,
                           );

@@ -55,17 +55,17 @@ class WishItem {
     };
   }
 
-  factory WishItem.fromMap(Map<String, dynamic> map) {
+  factory WishItem.fromMap(Map<String, dynamic> map, String id) {
     return WishItem(
-      id: map['id'] ?? '',
-      title: map['title'] ?? '',
-      description: map['description'] ?? '',
+      id: id,
+      title: map['title'] as String,
+      description: map['description'] as String,
       price: (map['price'] as num).toDouble(),
-      imageUrl: map['imageUrl'] ?? '',
-      priority: map['priority'] ?? 1,
-      isPurchased: map['isPurchased'] ?? false,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
-      addedBy: map['addedBy'],
+      imageUrl: map['imageUrl'] as String,
+      priority: map['priority'] as int,
+      isPurchased: map['isPurchased'] as bool? ?? false,
+      addedBy: map['addedBy'] as String?,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
     );
   }
 }
