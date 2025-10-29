@@ -613,7 +613,7 @@ class _WishlistPageState extends State<WishlistPage> {
         ],
       ),
       body: StreamBuilder<List<WishItem>>(
-        stream: _firestoreService.getWishItemsWithAccess(),
+        stream: _firestoreService.getSharedWishItems(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(

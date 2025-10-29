@@ -12,6 +12,8 @@ class AuthService {
       String password,
       ) async {
     try {
+      print('🔄 Начинаем регистрацию пользователя: $email');
+
       // Создаем пользователя в Firebase Auth
       final UserCredential result = await _auth.createUserWithEmailAndPassword(
         email: email,
@@ -19,24 +21,31 @@ class AuthService {
       );
 
       final User user = result.user!;
+      print('✅ Пользователь создан в Auth: ${user.uid}');
 
-      // Создаем профиль пользователя
+      // Создаем профиль пользователя в Firestore
       final profile = UserProfile(
         uid: user.uid,
         email: email,
-        displayName: email.split('@').first, // Используем часть email как имя
+        displayName: _getDisplayNameFromEmail(email),
         createdAt: DateTime.now(),
         shareToken: _generateShareToken(user.uid),
       );
 
-      await _firestore
-          .collection('user_profiles')
-          .doc(user.uid)
-          .set(profile.toMap());
+      print('🔄 Создаем профиль в Firestore...');
+      await _createUserProfile(profile);
+      print('✅ Профиль создан успешно!');
 
       return user;
+
+    } on FirebaseAuthException catch (e) {
+      print('❌ Ошибка Firebase Auth: ${e.code} - ${e.message}');
+      rethrow;
+    } on FirebaseException catch (e) {
+      print('❌ Ошибка Firestore: ${e.code} - ${e.message}');
+      throw Exception('Ошибка базы данных: ${e.message}');
     } catch (e) {
-      print('Ошибка регистрации: $e');
+      print('❌ Неизвестная ошибка: $e');
       rethrow;
     }
   }
@@ -51,21 +60,75 @@ class AuthService {
         email: email,
         password: password,
       );
-      return result.user!;
+
+      final User user = result.user!;
+
+      // Проверяем, есть ли профиль пользователя
+      await _ensureUserProfileExists(user);
+
+      return user;
     } catch (e) {
       print('Ошибка входа: $e');
       rethrow;
     }
   }
 
-  // Выход
-  Future<void> signOut() async {
-    await _auth.signOut();
+  // Создание профиля пользователя
+  Future<void> _createUserProfile(UserProfile profile) async {
+    try {
+      await _firestore
+          .collection('user_profiles')
+          .doc(profile.uid)
+          .set(profile.toMap());
+      print('📝 Профиль создан для: ${profile.email}');
+    } catch (e) {
+      print('❌ Ошибка создания профиля: $e');
+      rethrow;
+    }
+  }
+
+  // Проверка и создание профиля если его нет
+  Future<void> _ensureUserProfileExists(User user) async {
+    try {
+      final profileDoc = await _firestore
+          .collection('user_profiles')
+          .doc(user.uid)
+          .get();
+
+      if (!profileDoc.exists) {
+        print('⚠️ Профиль не найден, создаем...');
+
+        final profile = UserProfile(
+          uid: user.uid,
+          email: user.email!,
+          displayName: _getDisplayNameFromEmail(user.email!),
+          createdAt: DateTime.now(),
+          shareToken: _generateShareToken(user.uid),
+        );
+
+        await _createUserProfile(profile);
+        print('✅ Профиль создан для существующего пользователя');
+      } else {
+        print('✅ Профиль найден');
+      }
+    } catch (e) {
+      print('❌ Ошибка проверки профиля: $e');
+    }
+  }
+
+  // Получение имени из email
+  String _getDisplayNameFromEmail(String email) {
+    return email.split('@').first;
   }
 
   // Генерация уникального токена для ссылки
   String _generateShareToken(String uid) {
     return '${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${uid.substring(0, 8)}';
+  }
+
+  // Выход
+  Future<void> signOut() async {
+    await _auth.signOut();
   }
 
   // Получение текущего пользователя

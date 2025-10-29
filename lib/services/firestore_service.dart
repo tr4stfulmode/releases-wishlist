@@ -68,10 +68,33 @@ class FirestoreService {
       if (snapshot.exists && snapshot.data() != null) {
         return UserProfile.fromMap(snapshot.data()!);
       }
-      throw Exception('Профиль пользователя не найден');
+
+      // Если профиль не найден, создаем базовый
+      print('⚠️ Профиль не найден для $uid, создаем базовый...');
+      final user = await _auth.currentUser;
+      if (user != null) {
+        final basicProfile = UserProfile(
+          uid: uid,
+          email: 'unknown@email.com',
+          displayName: 'Пользователь',
+          createdAt: DateTime.now(),
+          shareToken: 'default_$uid',
+        );
+        return basicProfile;
+      }
+
+      throw Exception('Профиль пользователя не найден и невозможно создать базовый');
     } catch (e) {
-      print('Ошибка получения профиля: $e');
-      throw Exception('Не удалось загрузить профиль пользователя');
+      print('❌ Ошибка получения профиля: $e');
+
+      // Возвращаем базовый профиль в случае ошибки
+      return UserProfile(
+        uid: uid,
+        email: 'error@email.com',
+        displayName: 'Неизвестный пользователь',
+        createdAt: DateTime.now(),
+        shareToken: 'error_$uid',
+      );
     }
   }
 
@@ -119,6 +142,51 @@ class FirestoreService {
           .toList());
     });
   }
+  // Получение вишлистов только подключенных пользователей
+  Stream<List<WishItem>> getSharedWishItems() {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return const Stream.empty();
+
+    return getAccessibleWishlistIds().asyncExpand((accessibleIds) {
+      // Только ID пользователей, к чьим вишлистам мы подключены
+      final userIds = {currentUser.uid, ...accessibleIds};
+
+      print('👥 Показываем вишлисты пользователей: $userIds');
+
+      if (userIds.isEmpty) return const Stream.empty();
+
+      return _firestore
+          .collection('wish_items')
+          .where('addedBy', whereIn: userIds.toList())
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((snapshot) {
+        final items = snapshot.docs
+            .map((doc) => WishItem.fromMap(doc.data()!, doc.id))
+            .toList();
+
+        print('📦 Загружено ${items.length} предметов от ${userIds.length} пользователей');
+
+        // Отладочная информация
+        for (final item in items) {
+          print('🎁 ${item.title} - добавил: ${item.addedBy}');
+        }
+
+        return items;
+      });
+    });
+  }
+
+// Получение ВСЕХ предметов (без фильтрации) - для отладки
+  Stream<List<WishItem>> getAllWishItems() {
+    return _firestore
+        .collection('wish_items')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+        .map((doc) => WishItem.fromMap(doc.data()!, doc.id))
+        .toList());
+  }
 
   // Дополнительные методы для работы с shared вишлистами
   Future<List<String>> getSharedWithUserIds() async {
@@ -162,13 +230,5 @@ class FirestoreService {
   }
 
   // Простой метод для получения всех вишлистов (без фильтрации по доступу)
-  Stream<List<WishItem>> getAllWishItems() {
-    return _firestore
-        .collection('wish_items')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-        .map((doc) => WishItem.fromMap(doc.data()!, doc.id))
-        .toList());
-  }
+
 }
