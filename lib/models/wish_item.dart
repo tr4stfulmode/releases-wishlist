@@ -64,7 +64,7 @@ class WishItem {
       imageUrl: map['imageUrl'] as String,
       priority: map['priority'] as int,
       isPurchased: map['isPurchased'] as bool? ?? false,
-      addedBy: map['addedBy'] as String?,
+      addedBy: map['addedBy'] as String?, // Должен быть UID
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
     );
   }

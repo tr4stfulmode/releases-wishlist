@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Добавьте этот импорт
 import 'package:app_wishlist/services/share_service.dart';
 import 'package:app_wishlist/services/firestore_service.dart';
 import 'package:app_wishlist/models/shared_wishlist.dart';
 import 'package:app_wishlist/models/user_profile.dart';
+import 'package:clipboard/clipboard.dart';
 
 class WishlistManagerPage extends StatefulWidget {
   const WishlistManagerPage({super.key});
@@ -15,26 +18,34 @@ class WishlistManagerPage extends StatefulWidget {
 class _WishlistManagerPageState extends State<WishlistManagerPage> {
   final ShareService _shareService = ShareService();
   final FirestoreService _firestoreService = FirestoreService();
+  final FirebaseAuth _auth = FirebaseAuth.instance; // Добавьте эту строку
   final TextEditingController _linkController = TextEditingController();
+  bool _isConnecting = false;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Управление вишлистами'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
+        title: const Text(
+          'Управление вишлистами',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
       ),
       body: Column(
         children: [
           // Секция "Мой вишлист"
           _buildMyWishlistSection(),
 
-          // Секция "Доступные вишлисты"
-          _buildSharedWishlistsSection(),
-
           // Секция "Подключиться по ссылке"
           _buildConnectSection(),
+
+          // Секция "Доступные вишлисты"
+          _buildSharedWishlistsSection(),
         ],
       ),
     );
@@ -56,16 +67,17 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                 Text(
                   'МОЯ ССЫЛКА ДЛЯ ПРИГЛАШЕНИЯ',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: Colors.blue,
+                    fontFamily: 'Poppins',
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            StreamBuilder<UserProfile>(
-              stream: _firestoreService.getCurrentUserProfile(),
+            FutureBuilder<String>(
+              future: _shareService.generateMyShareLink(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Padding(
@@ -83,7 +95,10 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                         const SizedBox(height: 8),
                         Text(
                           'Ошибка: ${snapshot.error}',
-                          style: const TextStyle(color: Colors.red),
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontFamily: 'Poppins',
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ],
@@ -92,8 +107,7 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                 }
 
                 if (snapshot.hasData) {
-                  final profile = snapshot.data!;
-                  final shareLink = _shareService.generateShareLink(profile.shareToken);
+                  final shareLink = snapshot.data!;
 
                   return Column(
                     children: [
@@ -113,6 +127,7 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 color: Colors.blue,
+                                fontFamily: 'Poppins',
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -124,6 +139,7 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                                   color: Colors.blue,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
+                                  fontFamily: 'Poppins',
                                 ),
                                 textAlign: TextAlign.center,
                                 overflow: TextOverflow.ellipsis,
@@ -136,6 +152,7 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                               style: TextStyle(
                                 fontSize: 10,
                                 color: Colors.blue,
+                                fontFamily: 'Poppins',
                               ),
                             ),
                           ],
@@ -150,7 +167,10 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                             child: ElevatedButton.icon(
                               onPressed: () => _copyToClipboard(context, shareLink),
                               icon: const Icon(Icons.copy, size: 20),
-                              label: const Text('КОПИРОВАТЬ'),
+                              label: const Text(
+                                'КОПИРОВАТЬ',
+                                style: TextStyle(fontFamily: 'Poppins'),
+                              ),
                               style: ElevatedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(vertical: 15),
                                 backgroundColor: Colors.blue,
@@ -163,7 +183,10 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                             child: ElevatedButton.icon(
                               onPressed: () => _shareLink(shareLink),
                               icon: const Icon(Icons.share, size: 20),
-                              label: const Text('ПОДЕЛИТЬСЯ'),
+                              label: const Text(
+                                'ПОДЕЛИТЬСЯ',
+                                style: TextStyle(fontFamily: 'Poppins'),
+                              ),
                               style: ElevatedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(vertical: 15),
                                 backgroundColor: Colors.green,
@@ -184,6 +207,7 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                             fontSize: 12,
                             color: Colors.grey,
                             height: 1.4,
+                            fontFamily: 'Poppins',
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -192,7 +216,10 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                   );
                 }
 
-                return const Text('Данные не найдены');
+                return const Text(
+                  'Данные не найдены',
+                  style: TextStyle(fontFamily: 'Poppins'),
+                );
               },
             ),
           ],
@@ -209,13 +236,14 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Padding(
-              padding: EdgeInsets.only(bottom: 8),
+              padding: EdgeInsets.only(bottom: 8, left: 8),
               child: Text(
                 'ПОДКЛЮЧЕННЫЕ ВИШЛИСТЫ',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                   color: Colors.grey,
+                  fontFamily: 'Poppins',
                 ),
               ),
             ),
@@ -224,10 +252,13 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                 stream: _shareService.getSharedWishlists(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
                   }
 
                   if (snapshot.hasError) {
+                    print('❌ Ошибка загрузки shared wishlists: ${snapshot.error}');
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -235,10 +266,20 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                           const Icon(Icons.error_outline, size: 50, color: Colors.red),
                           const SizedBox(height: 16),
                           Text(
-                            'Ошибка загрузки',
+                            'Ошибка загрузки подключенных вишлистов',
                             style: TextStyle(
                               color: Colors.grey[600],
                               fontSize: 16,
+                              fontFamily: 'Poppins',
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          ElevatedButton(
+                            onPressed: () => setState(() {}),
+                            child: const Text(
+                              'Попробовать снова',
+                              style: TextStyle(fontFamily: 'Poppins'),
                             ),
                           ),
                         ],
@@ -246,11 +287,19 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                     );
                   }
 
-                  if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                  final sharedWishlists = snapshot.data ?? [];
+                  final currentUser = _auth.currentUser; // Используем _auth
+
+                  // Фильтруем только чужие вишлисты (не свои)
+                  final otherWishlists = sharedWishlists.where((wishlist) {
+                    return wishlist.ownerId != currentUser?.uid;
+                  }).toList();
+
+                  if (otherWishlists.isNotEmpty) {
                     return ListView.builder(
-                      itemCount: snapshot.data!.length,
+                      itemCount: otherWishlists.length,
                       itemBuilder: (context, index) {
-                        final sharedWishlist = snapshot.data![index];
+                        final sharedWishlist = otherWishlists[index];
                         return _buildSharedWishlistCard(sharedWishlist);
                       },
                     );
@@ -268,17 +317,19 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey,
+                            fontFamily: 'Poppins',
                           ),
                         ),
                         SizedBox(height: 8),
                         Padding(
                           padding: EdgeInsets.symmetric(horizontal: 32),
                           child: Text(
-                            'Поделитесь своей ссылкой с друзьями, чтобы видеть их вишлисты здесь',
+                            'Подключитесь к вишлистам друзей с помощью ссылок-приглашений',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey,
+                              fontFamily: 'Poppins',
                             ),
                           ),
                         ),
@@ -312,6 +363,7 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: Colors.purple,
+                    fontFamily: 'Poppins',
                   ),
                 ),
               ],
@@ -322,6 +374,7 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
               style: TextStyle(
                 fontSize: 14,
                 color: Colors.grey,
+                fontFamily: 'Poppins',
               ),
               textAlign: TextAlign.center,
             ),
@@ -337,13 +390,14 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                 filled: true,
                 fillColor: Colors.grey[50],
               ),
+              style: const TextStyle(fontFamily: 'Poppins'),
             ),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: _connectToWishlist,
+                onPressed: _isConnecting ? null : _connectToWishlist,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.purple,
                   foregroundColor: Colors.white,
@@ -351,9 +405,22 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text(
+                child: _isConnecting
+                    ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+                    : const Text(
                   'ПОДКЛЮЧИТЬСЯ',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Poppins',
+                  ),
                 ),
               ),
             ),
@@ -370,50 +437,32 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
       child: FutureBuilder<UserProfile>(
         future: _firestoreService.getUserProfile(sharedWishlist.ownerId),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const ListTile(
-              leading: CircleAvatar(child: CircularProgressIndicator()),
-              title: Text('Загрузка...'),
-            );
-          }
+          final isLoaded = snapshot.connectionState == ConnectionState.done && snapshot.hasData;
+          final owner = snapshot.data;
 
-          if (snapshot.hasError || !snapshot.hasData) {
-            return ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: Colors.grey,
-                child: Icon(Icons.person_off, color: Colors.white),
-              ),
-              title: const Text('Неизвестный пользователь'),
-              subtitle: Text('ID: ${sharedWishlist.ownerId}'),
-              trailing: IconButton(
-                icon: const Icon(Icons.remove_circle, color: Colors.red),
-                onPressed: () => _disconnectWishlist(sharedWishlist.id),
-                tooltip: 'Отключиться',
-              ),
-            );
-          }
-
-          final owner = snapshot.data!;
           return ListTile(
             leading: CircleAvatar(
               backgroundColor: Colors.blue[100],
-              backgroundImage: owner.photoURL != null
-                  ? NetworkImage(owner.photoURL!)
-                  : null,
-              child: owner.photoURL == null
+              child: isLoaded && owner != null
                   ? Text(
                 owner.displayName.isNotEmpty
                     ? owner.displayName[0].toUpperCase()
                     : '?',
                 style: const TextStyle(color: Colors.blue),
               )
-                  : null,
+                  : const CircularProgressIndicator(),
             ),
             title: Text(
-              owner.displayName,
-              style: const TextStyle(fontWeight: FontWeight.w500),
+              isLoaded && owner != null ? owner.displayName : 'Загрузка...',
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
+                fontFamily: 'Poppins',
+              ),
             ),
-            subtitle: Text(owner.email),
+            subtitle: Text(
+              isLoaded && owner != null ? owner.email : 'ID: ${sharedWishlist.ownerId}',
+              style: const TextStyle(fontFamily: 'Poppins'),
+            ),
             trailing: IconButton(
               icon: const Icon(Icons.remove_circle, color: Colors.red),
               onPressed: () => _disconnectWishlist(sharedWishlist.id),
@@ -459,14 +508,20 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
           children: [
             Icon(Icons.share, color: Colors.blue),
             SizedBox(width: 8),
-            Text('Поделиться ссылкой'),
+            Text(
+              'Поделиться ссылкой',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Скопируйте ссылку и отправьте друзьям:'),
+            const Text(
+              'Скопируйте ссылку и отправьте друзьям:',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
             const SizedBox(height: 16),
             Container(
               width: double.infinity,
@@ -481,6 +536,7 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                 style: const TextStyle(
                   color: Colors.blue,
                   fontSize: 12,
+                  fontFamily: 'Poppins',
                 ),
               ),
             ),
@@ -489,14 +545,20 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Закрыть'),
+            child: const Text(
+              'Закрыть',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
               _copyToClipboard(context, link);
               Navigator.pop(context);
             },
-            child: const Text('Копировать ссылку'),
+            child: const Text(
+              'Копировать ссылку',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
           ),
         ],
       ),
@@ -511,14 +573,20 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
           children: [
             Icon(Icons.link, color: Colors.blue),
             SizedBox(width: 8),
-            Text('Полная ссылка'),
+            Text(
+              'Полная ссылка',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Ваша ссылка для приглашения:'),
+            const Text(
+              'Ваша ссылка для приглашения:',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
@@ -533,7 +601,7 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                 style: const TextStyle(
                   color: Colors.blue,
                   fontSize: 12,
-                  fontFamily: 'Monospace',
+                  fontFamily: 'Poppins',
                 ),
               ),
             ),
@@ -542,14 +610,20 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Закрыть'),
+            child: const Text(
+              'Закрыть',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
               _copyToClipboard(context, link);
               Navigator.pop(context);
             },
-            child: const Text('Копировать'),
+            child: const Text(
+              'Копировать',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
           ),
         ],
       ),
@@ -557,24 +631,46 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
   }
 
   Future<void> _copyToClipboard(BuildContext context, String text) async {
-    // Временное решение - показываем уведомление
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Ссылка скопирована в буфер обмена! 📋'),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
-    );
-
-    // Для реального копирования раскомментируйте:
-    // await Clipboard.setData(ClipboardData(text: text));
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Ссылка скопирована в буфер обмена! 📋',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Ошибка копирования: $e',
+              style: const TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _connectToWishlist() async {
+    if (_isConnecting) return;
+
+    setState(() {
+      _isConnecting = true;
+    });
+
     try {
       final url = _linkController.text.trim();
       if (url.isEmpty) {
@@ -589,35 +685,68 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
       await _shareService.connectToWishlist(token);
       _linkController.clear();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Успешно подключено к вишлисту!'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 3),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '✅ Успешно подключено к вишлисту!',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Ошибка: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '❌ Ошибка: $e',
+              style: const TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isConnecting = false;
+        });
+      }
     }
   }
 
   String _extractTokenFromUrl(String url) {
     try {
-      if (url.contains('http')) {
-        final uri = Uri.parse(url);
+      // Убираем пробелы и лишние символы
+      final cleanUrl = url.trim();
+
+      // Если это полная ссылка
+      if (cleanUrl.contains('http')) {
+        final uri = Uri.parse(cleanUrl);
         final segments = uri.pathSegments;
-        if (segments.length >= 2 && segments[0] == 'wishlist') {
-          return segments[1];
+
+        // Ищем токен в пути
+        for (int i = 0; i < segments.length; i++) {
+          if (segments[i] == 'wishlist' && i + 1 < segments.length) {
+            return segments[i + 1];
+          }
+        }
+
+        // Если не нашли в пути, проверяем параметры
+        final tokenFromQuery = uri.queryParameters['token'];
+        if (tokenFromQuery != null) {
+          return tokenFromQuery;
         }
       }
-      return url;
+
+      // Если это не ссылка, а просто токен
+      return cleanUrl;
     } catch (e) {
+      // В случае ошибки возвращаем исходный текст
       return url;
     }
   }
@@ -625,19 +754,29 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
   Future<void> _disconnectWishlist(String sharedWishlistId) async {
     try {
       await _shareService.disconnectFromWishlist(sharedWishlistId);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('🔗 Доступ к вишлисту отключен'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '🔗 Доступ к вишлисту отключен',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Ошибка отключения: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '❌ Ошибка отключения: $e',
+              style: const TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

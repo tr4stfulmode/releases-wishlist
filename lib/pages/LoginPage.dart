@@ -11,17 +11,40 @@ class LoginPage extends StatefulWidget {
 class _LoginScreenState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _displayNameController = TextEditingController(); // Добавляем
+  final TextEditingController _displayNameController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   final AuthService _authService = AuthService();
   bool _isLoading = false;
   bool _obscurePassword = true;
-  bool _isSignUp = false; // Добавляем переключатель
+  bool _isSignUp = false;
+  bool _isMounted = false; // Флаг для отслеживания состояния виджета
+
+  @override
+  void initState() {
+    super.initState();
+    _isMounted = true;
+  }
+
+  @override
+  void dispose() {
+    _isMounted = false; // Помечаем как unmounted
+    _emailController.dispose();
+    _passwordController.dispose();
+    _displayNameController.dispose();
+    super.dispose();
+  }
+
+  // Безопасный вызов setState
+  void _safeSetState(VoidCallback fn) {
+    if (_isMounted) {
+      setState(fn);
+    }
+  }
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
+    _safeSetState(() {
       _isLoading = true;
     });
 
@@ -30,19 +53,21 @@ class _LoginScreenState extends State<LoginPage> {
         _emailController.text,
         _passwordController.text,
       );
+      // После успешного входа не вызываем setState - произойдет навигация
     } catch (e) {
-      _showErrorDialog(e.toString());
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (_isMounted) {
+        _showErrorDialog(e.toString());
+        _safeSetState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _signUp() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
+    _safeSetState(() {
       _isLoading = true;
     });
 
@@ -51,17 +76,21 @@ class _LoginScreenState extends State<LoginPage> {
         _emailController.text,
         _passwordController.text,
       );
+      // После успешной регистрации не вызываем setState - произойдет навигация
     } catch (e) {
-      _showErrorDialog(e.toString());
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (_isMounted) {
+        _showErrorDialog(e.toString());
+        _safeSetState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   void _showErrorDialog(String message) {
-    // Упрощаем сообщения об ошибках для пользователя
+    // Проверяем, что виджет еще mounted перед показом диалога
+    if (!_isMounted) return;
+
     String userFriendlyMessage = message;
 
     if (message.contains('email-already-in-use')) {
@@ -105,14 +134,6 @@ class _LoginScreenState extends State<LoginPage> {
   }
 
   @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    _displayNameController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
@@ -138,7 +159,7 @@ class _LoginScreenState extends State<LoginPage> {
                 const SizedBox(height: 30),
                 _buildAuthButtons(),
                 const SizedBox(height: 20),
-                _buildSwitchAuthMode(), // Добавляем переключатель
+                _buildSwitchAuthMode(),
               ],
             ),
           ),
@@ -210,7 +231,6 @@ class _LoginScreenState extends State<LoginPage> {
         key: _formKey,
         child: Column(
           children: [
-            // Поле имени (только для регистрации)
             if (_isSignUp) ...[
               Container(
                 decoration: BoxDecoration(
@@ -251,8 +271,6 @@ class _LoginScreenState extends State<LoginPage> {
               ),
               const SizedBox(height: 20),
             ],
-
-            // Email Field
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
@@ -292,8 +310,6 @@ class _LoginScreenState extends State<LoginPage> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Password Field
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
@@ -318,7 +334,7 @@ class _LoginScreenState extends State<LoginPage> {
                       color: Colors.grey,
                     ),
                     onPressed: () {
-                      setState(() {
+                      _safeSetState(() {
                         _obscurePassword = !_obscurePassword;
                       });
                     },
@@ -386,12 +402,12 @@ class _LoginScreenState extends State<LoginPage> {
           ),
         ),
         const SizedBox(height: 16),
-        if (!_isSignUp) // Показываем кнопку регистрации только в режиме входа
+        if (!_isSignUp)
           SizedBox(
             width: double.infinity,
             height: 56,
             child: OutlinedButton(
-              onPressed: _isLoading ? null : () => setState(() => _isSignUp = true),
+              onPressed: _isLoading ? null : () => _safeSetState(() => _isSignUp = true),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white,
                 side: const BorderSide(color: Colors.white, width: 2),
@@ -418,7 +434,7 @@ class _LoginScreenState extends State<LoginPage> {
     return TextButton(
       onPressed: _isLoading
           ? null
-          : () => setState(() => _isSignUp = !_isSignUp),
+          : () => _safeSetState(() => _isSignUp = !_isSignUp),
       child: Text(
         _isSignUp
             ? 'Уже есть аккаунт? Войти'

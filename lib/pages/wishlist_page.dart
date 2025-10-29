@@ -23,7 +23,6 @@ class _WishlistPageState extends State<WishlistPage> {
   final FirestoreService _firestoreService = FirestoreService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Для отслеживания уже показанных уведомлений
   final Set<String> _notifiedItems = {};
 
   @override
@@ -31,11 +30,19 @@ class _WishlistPageState extends State<WishlistPage> {
     super.initState();
     _initializeNotifications();
     _startNotificationListener();
+    _startNewItemsListener();
+  }
+
+  void _startNewItemsListener() {
+    _firestoreService.getSharedWishItems().listen((items) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkForNewItems(items);
+      });
+    });
   }
 
   @override
   void dispose() {
-    // УДАЛИЛИ NotificationService.dispose()
     super.dispose();
   }
 
@@ -45,39 +52,45 @@ class _WishlistPageState extends State<WishlistPage> {
   }
 
   void _startNotificationListener() {
-    // Слушатель для новых предметов в реальном времени
-    _firestoreService.getWishItems().listen((items) {
+    _firestoreService.getSharedWishItems().listen((items) {
       _checkForNewItems(items);
     });
   }
 
   void _checkForNewItems(List<WishItem> items) {
-    final currentUserEmail = _auth.currentUser?.email;
+    final currentUserUid = _auth.currentUser?.uid;
 
     for (final item in items) {
-      // Если предмет добавлен другим пользователем и мы еще не уведомляли о нем
       if (item.addedBy != null &&
-          item.addedBy != currentUserEmail &&
+          item.addedBy != currentUserUid &&
           !_notifiedItems.contains(item.id)) {
-        // Проверяем, что предмет новый (создан не более 2 минут назад)
-        final twoMinutesAgo =
-            DateTime.now().subtract(const Duration(minutes: 2));
+        final twoMinutesAgo = DateTime.now().subtract(const Duration(minutes: 2));
         if (item.createdAt.isAfter(twoMinutesAgo)) {
-          // Показываем СИСТЕМНОЕ уведомление
-          NotificationService.showNewItemNotification(
-            item.title,
-            item.addedBy!,
-          );
-
-          // Также показываем SnackBar уведомление в приложении
-          _showNewItemSnackBar(item.title, item.addedBy!);
-
-          // Помечаем как уведомленный
+          _getUserInfoForNotification(item.addedBy!, item.title);
           _notifiedItems.add(item.id);
-
-          print('✅ Показано уведомление для предмета: ${item.title}');
         }
       }
+    }
+  }
+
+  void _getUserInfoForNotification(String userUid, String itemTitle) async {
+    try {
+      final userProfile = await _firestoreService.getUserProfile(userUid);
+      final userName = userProfile.displayName;
+
+      NotificationService.showNewItemNotification(
+        itemTitle,
+        userName,
+      );
+
+      _showNewItemSnackBar(itemTitle, userName);
+
+    } catch (e) {
+      NotificationService.showNewItemNotification(
+        itemTitle,
+        'Другой пользователь',
+      );
+      _showNewItemSnackBar(itemTitle, 'Другой пользователь');
     }
   }
 
@@ -157,7 +170,6 @@ class _WishlistPageState extends State<WishlistPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Превью выбранного изображения
                     if (_selectedImage != null)
                       Container(
                         height: 150,
@@ -194,7 +206,8 @@ class _WishlistPageState extends State<WishlistPage> {
                               bottom: 8,
                               left: 8,
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
                                   color: Colors.black54,
                                   borderRadius: BorderRadius.circular(8),
@@ -226,7 +239,6 @@ class _WishlistPageState extends State<WishlistPage> {
                         ),
                       ),
 
-                    // Кнопки выбора изображения
                     Row(
                       children: [
                         Expanded(
@@ -250,7 +262,8 @@ class _WishlistPageState extends State<WishlistPage> {
                                   });
                                 }
                               } else {
-                                _showErrorSnackBar('Разрешение на доступ к галерее не предоставлено');
+                                _showErrorSnackBar(
+                                    'Разрешение на доступ к галерее не предоставлено');
                               }
                             },
                           ),
@@ -277,7 +290,8 @@ class _WishlistPageState extends State<WishlistPage> {
                                   });
                                 }
                               } else {
-                                _showErrorSnackBar('Разрешение на камеру не предоставлено');
+                                _showErrorSnackBar(
+                                    'Разрешение на камеру не предоставлено');
                               }
                             },
                           ),
@@ -316,7 +330,8 @@ class _WishlistPageState extends State<WishlistPage> {
                         hintText: '0.00',
                       ),
                       style: const TextStyle(fontFamily: 'Poppins'),
-                      keyboardType: TextInputType.numberWithOptions(decimal: true),
+                      keyboardType:
+                      TextInputType.numberWithOptions(decimal: true),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -328,9 +343,11 @@ class _WishlistPageState extends State<WishlistPage> {
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.shuffle),
                           onPressed: () {
-                            final randomIndex = (priority - 1) % defaultImages.length;
+                            final randomIndex =
+                                (priority - 1) % defaultImages.length;
                             setDialogState(() {
-                              imageUrlController.text = defaultImages[randomIndex];
+                              imageUrlController.text =
+                              defaultImages[randomIndex];
                               _selectedImage = null;
                             });
                           },
@@ -346,7 +363,6 @@ class _WishlistPageState extends State<WishlistPage> {
                       },
                     ),
 
-                    // Информация о локальных изображениях
                     if (_selectedImage != null)
                       Container(
                         width: double.infinity,
@@ -392,7 +408,9 @@ class _WishlistPageState extends State<WishlistPage> {
                                 });
                               },
                               icon: Icon(
-                                index < priority ? Icons.star : Icons.star_border,
+                                index < priority
+                                    ? Icons.star
+                                    : Icons.star_border,
                                 color: Theme.of(context).colorScheme.primary,
                                 size: 32,
                               ),
@@ -421,7 +439,10 @@ class _WishlistPageState extends State<WishlistPage> {
                     'Отмена',
                     style: TextStyle(
                       fontFamily: 'Poppins',
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.6),
                     ),
                   ),
                 ),
@@ -446,18 +467,14 @@ class _WishlistPageState extends State<WishlistPage> {
                     try {
                       String imageUrl;
 
-                      // Если выбрано изображение из галереи/камеры
                       if (_selectedImage != null) {
-                        // Используем случайное изображение вместо локального пути
-                        // (локальные пути не работают для других пользователей)
                         imageUrl = defaultImages[priority - 1];
-                        _showInfoSnackBar('Локальное изображение заменено на стандартное для совместимости');
+                        _showInfoSnackBar(
+                            'Локальное изображение заменено на стандартное для совместимости');
                       }
-                      // Если введена ссылка
                       else if (imageUrlController.text.isNotEmpty) {
                         imageUrl = imageUrlController.text.trim();
                       }
-                      // Если ничего не выбрано - случайное изображение
                       else {
                         imageUrl = defaultImages[priority - 1];
                       }
@@ -468,13 +485,14 @@ class _WishlistPageState extends State<WishlistPage> {
                         price: price,
                         imageUrl: imageUrl,
                         priority: priority,
-                        addedBy: _auth.currentUser?.email,
+                        addedBy: _auth.currentUser?.uid,
                       );
 
                       await _firestoreService.addWishItem(newWish);
 
                       Navigator.pop(context);
-                      _showSuccessSnackBar('«${newWish.title}» добавлен в вишлист!');
+                      _showSuccessSnackBar(
+                          '«${newWish.title}» добавлен в вишлист!');
                     } catch (e) {
                       _showErrorSnackBar('Ошибка при добавлении: $e');
                     }
@@ -495,7 +513,6 @@ class _WishlistPageState extends State<WishlistPage> {
     );
   }
 
-// Добавьте этот метод для информационных сообщений
   void _showInfoSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -583,7 +600,6 @@ class _WishlistPageState extends State<WishlistPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      // В AppBar добавляем кнопку управления вишлистами
       appBar: AppBar(
         title: const Text(
           'Общий Вишлист',
@@ -601,7 +617,8 @@ class _WishlistPageState extends State<WishlistPage> {
             icon: const Icon(Icons.group),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const WishlistManagerPage()),
+              MaterialPageRoute(
+                  builder: (context) => const WishlistManagerPage()),
             ),
             tooltip: 'Управление вишлистами',
           ),
@@ -617,12 +634,35 @@ class _WishlistPageState extends State<WishlistPage> {
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
-              child: Text(
-                'Ошибка загрузки: ${snapshot.error}',
-                style: const TextStyle(
-                  fontFamily: 'Poppins',
-                  color: Colors.red,
-                ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: Colors.red[300],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Ошибка загрузки',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red[700],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Попробуйте перезайти в приложение',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
             );
           }
@@ -635,12 +675,8 @@ class _WishlistPageState extends State<WishlistPage> {
 
           final wishItems = snapshot.data ?? [];
 
-          // Проверяем новые предметы от других пользователей
-          _checkForNewItems(wishItems);
-
           return Column(
             children: [
-              // Статистика
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
@@ -676,39 +712,59 @@ class _WishlistPageState extends State<WishlistPage> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    if (_calculatePurchasedCount(wishItems) > 0)
-                      Text(
-                        'Куплено: ${_calculatePurchasedCount(wishItems)}',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onPrimaryContainer
-                              .withOpacity(0.8),
-                        ),
-                      ),
+                    StreamBuilder<List<String>>(
+                      stream: _firestoreService.getAccessibleWishlistIds(),
+                      builder: (context, accessibleSnapshot) {
+                        if (accessibleSnapshot.hasData) {
+                          final accessibleIds = accessibleSnapshot.data!;
+                          final connectedCount = accessibleIds.length;
+
+                          return Column(
+                            children: [
+                              if (_calculatePurchasedCount(wishItems) > 0)
+                                Text(
+                                  'Куплено: ${_calculatePurchasedCount(wishItems)}',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 14,
+                                    color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                                  ),
+                                ),
+                              if (connectedCount > 0)
+                                Text(
+                                  'Подключено к $connectedCount вишлистам',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 12,
+                                    color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                                  ),
+                                ),
+                            ],
+                          );
+                        }
+                        return const SizedBox();
+                      },
+                    ),
                   ],
                 ),
               ),
 
-              // Список желаний
               Expanded(
                 child: wishItems.isEmpty
                     ? const _EmptyState()
                     : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: wishItems.length,
-                        itemBuilder: (context, index) {
-                          final item = wishItems[index];
-                          return WishItemCard(
-                            item: item,
-                            onTap: () => _openItemDetail(context, item),
-                            onDelete: () => _deleteWishItem(item.id),
-                            showAddedBy: true,
-                          );
-                        },
-                      ),
+                  padding: const EdgeInsets.all(16),
+                  itemCount: wishItems.length,
+                  itemBuilder: (context, index) {
+                    final item = wishItems[index];
+                    return WishItemCard(
+                      item: item,
+                      onTap: () => _openItemDetail(context, item),
+                      onDelete: () => _deleteWishItem(item.id),
+                      showAddedBy: true,
+                    );
+                  },
+                ),
               ),
             ],
           );
@@ -724,7 +780,6 @@ class _WishlistPageState extends State<WishlistPage> {
   }
 }
 
-// Виджет для пустого состояния
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
 
