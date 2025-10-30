@@ -38,20 +38,25 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
       ),
-      body: Column(
-        children: [
-          // Секция "Мой персональный вишлист"
-          _buildPersonalWishlistSection(),
+      body: SingleChildScrollView( // Добавляем скролл
+        child: Column(
+          children: [
+            // Секция "Мой персональный вишлист"
+            _buildPersonalWishlistSection(),
 
-          // Секция "Подключиться к вишлисту по ссылке"
-          _buildConnectSection(),
+            // Секция "Подключиться к вишлисту по ссылке"
+            _buildConnectSection(),
 
-          // Секция "Общий вишлист"
-          _buildSharedWishlistSection(),
+            // Секция "Общий вишлист"
+            _buildSharedWishlistSection(),
 
-          // Секция "Доступные вишлисты"
-          _buildConnectedWishlistsSection(),
-        ],
+            // Секция "Доступные вишлисты"
+            _buildConnectedWishlistsSection(),
+
+            // Добавляем отступ внизу для удобства скролла
+            const SizedBox(height: 20),
+          ],
+        ),
       ),
     );
   }
@@ -100,7 +105,10 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                 final personalLink = snapshot.data;
 
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const CircularProgressIndicator();
+                  return const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: CircularProgressIndicator(),
+                  );
                 }
 
                 return Column(
@@ -163,6 +171,8 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                                       fontFamily: 'Poppins',
                                     ),
                                     textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
@@ -351,6 +361,8 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
                         fontFamily: 'Poppins',
                       ),
                       textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -394,86 +406,85 @@ class _WishlistManagerPageState extends State<WishlistManagerPage> {
   }
 
   Widget _buildConnectedWishlistsSection() {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8, left: 8),
-              child: Text(
-                'МОИ ПОДКЛЮЧЕННЫЕ ВИШЛИСТЫ',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey,
-                  fontFamily: 'Poppins',
-                ),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8, left: 8),
+            child: Text(
+              'МОИ ПОДКЛЮЧЕННЫЕ ВИШЛИСТЫ',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+                fontFamily: 'Poppins',
               ),
             ),
-            Expanded(
-              child: StreamBuilder<List<SharedWishlist>>(
-                stream: _shareService.getConnectedWishlists(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+          ),
+          Container(
+            height: 200, // Ограничиваем высоту списка
+            child: StreamBuilder<List<SharedWishlist>>(
+              stream: _shareService.getConnectedWishlists(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.error_outline, size: 50, color: Colors.red),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Ошибка загрузки вишлистов',
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 16,
-                              fontFamily: 'Poppins',
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  final wishlists = snapshot.data ?? [];
-
-                  if (wishlists.isNotEmpty) {
-                    return ListView.builder(
-                      itemCount: wishlists.length,
-                      itemBuilder: (context, index) {
-                        final wishlist = wishlists[index];
-                        return _buildWishlistCard(wishlist);
-                      },
-                    );
-                  }
-
-                  return const Center(
+                if (snapshot.hasError) {
+                  return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.group_off, size: 60, color: Colors.grey),
-                        SizedBox(height: 16),
+                        const Icon(Icons.error_outline, size: 50, color: Colors.red),
+                        const SizedBox(height: 16),
                         Text(
-                          'Нет подключенных вишлистов',
+                          'Ошибка загрузки вишлистов',
                           style: TextStyle(
+                            color: Colors.grey[600],
                             fontSize: 16,
-                            color: Colors.grey,
                             fontFamily: 'Poppins',
                           ),
                         ),
                       ],
                     ),
                   );
-                },
-              ),
+                }
+
+                final wishlists = snapshot.data ?? [];
+
+                if (wishlists.isNotEmpty) {
+                  return ListView.builder(
+                    itemCount: wishlists.length,
+                    itemBuilder: (context, index) {
+                      final wishlist = wishlists[index];
+                      return _buildWishlistCard(wishlist);
+                    },
+                  );
+                }
+
+                return const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.group_off, size: 60, color: Colors.grey),
+                      SizedBox(height: 16),
+                      Text(
+                        'Нет подключенных вишлистов',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey,
+                          fontFamily: 'Poppins',
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
