@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:app_wishlist/models/wish_item.dart';
 import 'package:app_wishlist/services/firestore_service.dart';
+import 'dart:convert';
 
-class WishItemDetailPage extends StatelessWidget {
+class WishItemDetailPage extends StatefulWidget {
   final WishItem item;
   final FirestoreService firestoreService;
 
@@ -12,6 +13,19 @@ class WishItemDetailPage extends StatelessWidget {
     required this.item,
     required this.firestoreService,
   });
+
+  @override
+  State<WishItemDetailPage> createState() => _WishItemDetailPageState();
+}
+
+class _WishItemDetailPageState extends State<WishItemDetailPage> {
+  late WishItem _currentItem;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentItem = widget.item;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,25 +42,8 @@ class WishItemDetailPage extends StatelessWidget {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Основное изображение
-                  CachedNetworkImage(
-                    imageUrl: item.imageUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      color: Colors.grey[200],
-                      child: const Center(
-                        child: CircularProgressIndicator(),
-                      ),
-                    ),
-                    errorWidget: (context, url, error) => Container(
-                      color: Colors.grey[200],
-                      child: const Icon(
-                        Icons.shopping_bag,
-                        size: 80,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ),
+                  // Основное изображение (Base64 или Network)
+                  _buildDetailImage(),
 
                   // Градиент поверх изображения
                   Container(
@@ -84,7 +81,7 @@ class WishItemDetailPage extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${item.priority}/5',
+                            '${_currentItem.priority}/5',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 12,
@@ -99,12 +96,7 @@ class WishItemDetailPage extends StatelessWidget {
               ),
             ),
             pinned: true,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.share, color: Colors.white),
-                onPressed: () => _shareItem(context),
-              ),
-            ],
+
           ),
 
           // Контент
@@ -119,7 +111,7 @@ class WishItemDetailPage extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          item.title,
+                          _currentItem.title,
                           style: const TextStyle(
                             fontFamily: 'Poppins',
                             fontSize: 28,
@@ -138,13 +130,13 @@ class WishItemDetailPage extends StatelessWidget {
                             vertical: 8,
                           ),
                           decoration: BoxDecoration(
-                            color: item.isPurchased
+                            color: _currentItem.isPurchased
                                 ? Colors.green
                                 : Colors.blue,
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            item.isPurchased ? 'КУПЛЕНО' : 'НЕ КУПЛЕНО',
+                            _currentItem.isPurchased ? 'КУПЛЕНО' : 'НЕ КУПЛЕНО',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 12,
@@ -177,13 +169,26 @@ class WishItemDetailPage extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '${item.price.toStringAsFixed(2)} ₽',
+                          '${_currentItem.price.toStringAsFixed(2)} ₽',
                           style: const TextStyle(
                             fontFamily: 'Poppins',
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
                             color: Colors.blue,
                           ),
+                        ),
+                        const Spacer(),
+                        // Звезды приоритета
+                        Row(
+                          children: List.generate(5, (index) {
+                            return Icon(
+                              Icons.star,
+                              size: 20,
+                              color: index < _currentItem.priority
+                                  ? Colors.amber
+                                  : Colors.grey[300],
+                            );
+                          }),
                         ),
                       ],
                     ),
@@ -192,7 +197,7 @@ class WishItemDetailPage extends StatelessWidget {
                   const SizedBox(height: 24),
 
                   // Описание
-                  if (item.description.isNotEmpty) ...[
+                  if (_currentItem.description.isNotEmpty) ...[
                     const Text(
                       'Описание',
                       style: TextStyle(
@@ -202,13 +207,21 @@ class WishItemDetailPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      item.description,
-                      style: const TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 16,
-                        height: 1.5,
-                        color: Colors.black87,
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      child: Text(
+                        _currentItem.description,
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 16,
+                          height: 1.5,
+                          color: Colors.black87,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -226,7 +239,7 @@ class WishItemDetailPage extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Информация',
+                          'Информация о предмете',
                           style: TextStyle(
                             fontFamily: 'Poppins',
                             fontSize: 16,
@@ -237,19 +250,25 @@ class WishItemDetailPage extends StatelessWidget {
                         _buildInfoRow(
                           Icons.person,
                           'Добавил:',
-                          item.addedBy?.split('@').first ?? 'Неизвестно',
+                          _currentItem.addedBy?.split('@').first ?? 'Неизвестно',
                         ),
                         const SizedBox(height: 8),
                         _buildInfoRow(
                           Icons.calendar_today,
                           'Добавлено:',
-                          _formatDate(item.createdAt),
+                          _formatDate(_currentItem.createdAt),
                         ),
                         const SizedBox(height: 8),
                         _buildInfoRow(
                           Icons.category,
                           'Приоритет:',
-                          '${item.priority} из 5',
+                          '${_currentItem.priority} из 5',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildInfoRow(
+                          Icons.image,
+                          'Тип изображения:',
+                          _currentItem.base64Image != null ? 'Локальное' : 'Ссылка',
                         ),
                       ],
                     ),
@@ -262,9 +281,9 @@ class WishItemDetailPage extends StatelessWidget {
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => _openInBrowser(context, item.imageUrl),
-                          icon: const Icon(Icons.image),
-                          label: const Text('Открыть изображение'),
+                          onPressed: () => _viewFullImage(context),
+                          icon: const Icon(Icons.fullscreen),
+                          label: const Text('Полный размер'),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             side: BorderSide(color: Colors.blue.shade300),
@@ -276,17 +295,17 @@ class WishItemDetailPage extends StatelessWidget {
                         child: ElevatedButton.icon(
                           onPressed: () => _togglePurchased(context),
                           icon: Icon(
-                            item.isPurchased
+                            _currentItem.isPurchased
                                 ? Icons.remove_shopping_cart
                                 : Icons.shopping_cart_checkout,
                           ),
                           label: Text(
-                            item.isPurchased
+                            _currentItem.isPurchased
                                 ? 'Отменить покупку'
                                 : 'Отметить купленным',
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: item.isPurchased
+                            backgroundColor: _currentItem.isPurchased
                                 ? Colors.orange
                                 : Colors.green,
                             foregroundColor: Colors.white,
@@ -295,6 +314,22 @@ class WishItemDetailPage extends StatelessWidget {
                         ),
                       ),
                     ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Кнопка редактирования
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _editItem(context),
+                      icon: const Icon(Icons.edit),
+                      label: const Text('Редактировать предмет'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        side: BorderSide(color: Colors.grey.shade400),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -309,6 +344,93 @@ class WishItemDetailPage extends StatelessWidget {
         backgroundColor: Colors.red,
         foregroundColor: Colors.white,
         child: const Icon(Icons.delete),
+      ),
+    );
+  }
+
+  Widget _buildDetailImage() {
+    // Если есть Base64 изображение
+    if (_currentItem.base64Image != null && _currentItem.base64Image!.isNotEmpty) {
+      try {
+        return Image.memory(
+          base64Decode(_currentItem.base64Image!),
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return _buildErrorImage();
+          },
+        );
+      } catch (e) {
+        return _buildErrorImage();
+      }
+    }
+
+    // Если есть URL изображение
+    if (_currentItem.imageUrl.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: _currentItem.imageUrl,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          color: Colors.grey[200],
+          child: const Center(
+            child: CircularProgressIndicator(),
+          ),
+        ),
+        errorWidget: (context, url, error) => _buildErrorImage(),
+      );
+    }
+
+    // Если нет изображения
+    return _buildPlaceholderImage();
+  }
+
+  Widget _buildErrorImage() {
+    return Container(
+      color: Colors.grey[200],
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Colors.grey,
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Ошибка загрузки изображения',
+              style: TextStyle(
+                color: Colors.grey,
+                fontFamily: 'Poppins',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderImage() {
+    return Container(
+      color: Colors.grey[200],
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.photo,
+              size: 80,
+              color: Colors.grey,
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Нет изображения',
+              style: TextStyle(
+                color: Colors.grey,
+                fontFamily: 'Poppins',
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -345,24 +467,32 @@ class WishItemDetailPage extends StatelessWidget {
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}.'
         '${date.month.toString().padLeft(2, '0')}.'
-        '${date.year}';
+        '${date.year} в '
+        '${date.hour.toString().padLeft(2, '0')}:'
+        '${date.minute.toString().padLeft(2, '0')}';
   }
 
   void _togglePurchased(BuildContext context) async {
     try {
-      await firestoreService.togglePurchased(
-          item.id,
-          !item.isPurchased
+      await widget.firestoreService.togglePurchased(
+          _currentItem.id,
+          !_currentItem.isPurchased
       );
+
+      setState(() {
+        _currentItem = _currentItem.copyWith(
+          isPurchased: !_currentItem.isPurchased,
+        );
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            item.isPurchased
-                ? 'Предмет отмечен как некупленный'
-                : 'Предмет отмечен как купленный! 🎉',
+            _currentItem.isPurchased
+                ? 'Предмет отмечен как купленный! 🎉'
+                : 'Покупка отменена',
           ),
-          backgroundColor: item.isPurchased ? Colors.orange : Colors.green,
+          backgroundColor: _currentItem.isPurchased ? Colors.green : Colors.orange,
         ),
       );
     } catch (e) {
@@ -375,12 +505,85 @@ class WishItemDetailPage extends StatelessWidget {
     }
   }
 
+  void _viewFullImage(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Stack(
+          children: [
+            // Полноразмерное изображение
+            Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.9,
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: _buildFullSizeImage(),
+              ),
+            ),
+
+            // Кнопка закрытия
+            Positioned(
+              top: 8,
+              right: 8,
+              child: CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFullSizeImage() {
+    if (_currentItem.base64Image != null && _currentItem.base64Image!.isNotEmpty) {
+      try {
+        return Image.memory(
+          base64Decode(_currentItem.base64Image!),
+          fit: BoxFit.contain,
+        );
+      } catch (e) {
+        return _buildErrorImage();
+      }
+    }
+
+    if (_currentItem.imageUrl.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: _currentItem.imageUrl,
+        fit: BoxFit.contain,
+        placeholder: (context, url) => Container(
+          color: Colors.grey[200],
+          child: const Center(child: CircularProgressIndicator()),
+        ),
+        errorWidget: (context, url, error) => _buildErrorImage(),
+      );
+    }
+
+    return _buildPlaceholderImage();
+  }
+
+  void _editItem(BuildContext context) {
+    // Здесь можно реализовать редактирование предмета
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Функция редактирования будет добавлена позже'),
+      ),
+    );
+  }
+
   void _showDeleteDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Удалить предмет?'),
-        content: Text('Вы уверены, что хотите удалить «${item.title}»?'),
+        content: Text('Вы уверены, что хотите удалить «${_currentItem.title}»?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -401,43 +604,37 @@ class WishItemDetailPage extends StatelessWidget {
 
   void _deleteItem(BuildContext context) async {
     try {
-      await firestoreService.deleteWishItem(item.id);
-      Navigator.pop(context); // Возвращаемся назад после удаления
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Предмет удален'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      await widget.firestoreService.deleteWishItem(_currentItem.id);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Предмет удален'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка при удалении: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при удалении: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   void _shareItem(BuildContext context) {
-    // Здесь можно реализовать шеринг через share_plus
-    final shareText = 'Посмотрите на этот предмет: ${item.title}\n'
-        'Цена: ${item.price} ₽\n'
-        '${item.description}';
+    final shareText = '🎁 ${_currentItem.title}\n'
+        '💵 Цена: ${_currentItem.price} ₽\n'
+        '⭐ Приоритет: ${_currentItem.priority}/5\n'
+        '${_currentItem.description.isNotEmpty ? '📝 ${_currentItem.description}' : ''}';
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Функция шеринга будет добавлена позже'),
-      ),
-    );
-  }
-
-  void _openInBrowser(BuildContext context, String url) {
-    // Здесь можно реализовать открытие в браузере через url_launcher
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Открытие изображения в браузере'),
       ),
     );
   }

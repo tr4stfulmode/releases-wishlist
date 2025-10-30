@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:app_wishlist/models/wish_item.dart';
+import 'dart:convert';
 
 import '../models/user_profile.dart';
 import '../services/firestore_service.dart';
@@ -35,18 +36,8 @@ class WishItemCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              // Изображение
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  image: DecorationImage(
-                    image: NetworkImage(item.imageUrl),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
+              // Изображение (Base64 или Network)
+              _buildImageWidget(),
               const SizedBox(width: 16),
 
               // Информация
@@ -165,5 +156,123 @@ class WishItemCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildImageWidget() {
+    // Если есть Base64 изображение - используем его
+    if (item.base64Image != null && item.base64Image!.isNotEmpty) {
+      try {
+        return Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            image: DecorationImage(
+              image: MemoryImage(base64Decode(item.base64Image!)),
+              fit: BoxFit.cover,
+            ),
+          ),
+        );
+      } catch (e) {
+        // Если ошибка декодирования Base64, показываем иконку ошибки
+        return _buildErrorImage();
+      }
+    }
+
+    // Если есть URL изображение - используем его
+    if (item.imageUrl.isNotEmpty) {
+      return Container(
+        width: 60,
+        height: 60,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          image: DecorationImage(
+            image: NetworkImage(item.imageUrl),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: item.imageUrl.contains('unsplash.com')
+            ? null
+            : _buildImageLoadingIndicator(),
+      );
+    }
+
+    // Если нет изображения - показываем placeholder
+    return _buildPlaceholderImage();
+  }
+
+  Widget _buildImageLoadingIndicator() {
+    return FutureBuilder<bool>(
+      future: _checkImageUrl(item.imageUrl),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            color: Colors.grey[200],
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        }
+
+        if (snapshot.hasError || snapshot.data == false) {
+          return _buildErrorImage();
+        }
+
+        return const SizedBox.shrink();
+      },
+    );
+  }
+
+  Widget _buildPlaceholderImage() {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.grey[200],
+      ),
+      child: const Icon(
+        Icons.photo,
+        color: Colors.grey,
+        size: 24,
+      ),
+    );
+  }
+
+  Widget _buildErrorImage() {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.grey[200],
+      ),
+      child: const Icon(
+        Icons.error_outline,
+        color: Colors.red,
+        size: 24,
+      ),
+    );
+  }
+
+  Future<bool> _checkImageUrl(String url) async {
+    try {
+      if (url.isEmpty) return false;
+
+      // Для Base64 URL (заглушки)
+      if (url.startsWith('base64://')) return true;
+
+      // Для обычных URL проверяем валидность
+      final uri = Uri.tryParse(url);
+      if (uri == null || !uri.hasScheme) return false;
+
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 }

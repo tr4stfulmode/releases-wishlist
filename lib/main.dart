@@ -5,7 +5,7 @@ import 'firebase_options.dart';
 import 'pages/LoginPage.dart';
 import 'pages/wishlist_page.dart';
 import 'services/notification_service.dart';
-import 'services/simple_update_service.dart'; // ИМПОРТИРУЕМ ПРОСТОЙ СЕРВИС
+import 'services/rustore_update_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,7 +25,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'My Wishlist',
-      navigatorKey: SimpleUpdateService.navigatorKey, // ✅ МЕНЯЕМ НА ПРОСТОЙ СЕРВИС
+      navigatorKey: RuStoreUpdateService.navigatorKey, // ✅ ИСПОЛЬЗУЕМ RuStore СЕРВИС
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,
@@ -37,11 +37,11 @@ class MyApp extends StatelessWidget {
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
-          // Запускаем проверку обновлений
+          // Запускаем проверку обновлений через RuStore
           WidgetsBinding.instance.addPostFrameCallback((_) {
             Future.delayed(const Duration(seconds: 3), () {
-              print('🚀 MAIN: Starting SIMPLE update check...');
-              SimpleUpdateService.checkForUpdate(); // ✅ МЕНЯЕМ НА ПРОСТОЙ СЕРВИС
+              print('🚀 MAIN: Starting RuStore update check...');
+              RuStoreUpdateService.checkForUpdate(); // ✅ RuStore ПРОВЕРКА
             });
           });
 
