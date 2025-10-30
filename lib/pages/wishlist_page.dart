@@ -1,4 +1,5 @@
 import 'package:app_wishlist/pages/wishlist_manager_page.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:app_wishlist/models/wish_item.dart';
@@ -8,8 +9,11 @@ import 'package:app_wishlist/services/firestore_service.dart';
 import 'package:app_wishlist/services/notification_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:convert';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_wishlist/pages/wish_item_detail_page.dart';
+
+import '../services/rustore_update_service.dart';
 
 class WishlistPage extends StatefulWidget {
   const WishlistPage({super.key});
@@ -24,6 +28,54 @@ class _WishlistPageState extends State<WishlistPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final Set<String> _notifiedItems = {};
+  bool _isProcessingImage = false;
+
+  // Проверка версии Android
+  Future<bool> _isAndroid13OrHigher() async {
+    try {
+      final deviceInfo = await DeviceInfoPlugin().androidInfo;
+      return deviceInfo.version.sdkInt >= 33;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Диалог для перехода в настройки
+  void _showPermissionSettingsDialog(String permissionName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          'Требуется разрешение',
+          style: TextStyle(fontFamily: 'Poppins'),
+        ),
+        content: Text(
+          'Разрешение на $permissionName было отклонено навсегда. '
+              'Пожалуйста, предоставьте разрешение в настройках приложения.',
+          style: const TextStyle(fontFamily: 'Poppins'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Отмена',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              openAppSettings();
+            },
+            child: const Text(
+              'Настройки',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -31,6 +83,16 @@ class _WishlistPageState extends State<WishlistPage> {
     _initializeNotifications();
     _startNotificationListener();
     _startNewItemsListener();
+    _checkForAppUpdate();
+  }
+
+  void _checkForAppUpdate() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) {
+        await RuStoreUpdateService.checkForUpdate();
+      }
+    });
   }
 
   void _startNewItemsListener() {
@@ -121,8 +183,9 @@ class _WishlistPageState extends State<WishlistPage> {
             ),
           ],
         ),
-        backgroundColor: Colors.blue,
+        backgroundColor: _Colors.glassPrimary,
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         duration: const Duration(seconds: 4),
         action: SnackBarAction(
           label: 'OK',
@@ -135,6 +198,39 @@ class _WishlistPageState extends State<WishlistPage> {
     );
   }
 
+  // Конвертация изображения в Base64
+  Future<String?> _convertImageToBase64(XFile imageFile) async {
+    try {
+      setState(() {
+        _isProcessingImage = true;
+      });
+
+      // Читаем файл как байты
+      final bytes = await imageFile.readAsBytes();
+
+      // Конвертируем в Base64
+      final base64String = base64Encode(bytes);
+
+      // Проверяем размер (Firestore ограничение 1MB на документ)
+      if (base64String.length > 900000) { // ~1MB в Base64
+        _showErrorSnackBar('Изображение слишком большое. Выберите файл меньше 700KB');
+        return null;
+      }
+
+      setState(() {
+        _isProcessingImage = false;
+      });
+
+      return base64String;
+    } catch (e) {
+      setState(() {
+        _isProcessingImage = false;
+      });
+      _showErrorSnackBar('Ошибка обработки изображения: $e');
+      return null;
+    }
+  }
+
   void _addNewWish() {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
@@ -142,6 +238,7 @@ class _WishlistPageState extends State<WishlistPage> {
     final imageUrlController = TextEditingController();
     int priority = 3;
     XFile? _selectedImage;
+    String? _base64Image;
 
     final List<String> defaultImages = [
       'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400',
@@ -157,355 +254,551 @@ class _WishlistPageState extends State<WishlistPage> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text(
-                'Добавить новое желание',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.primary,
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.all(20),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(28),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFFF8F9FA),
+                      Color(0xFFE9ECEF),
+                    ],
+                  ),
                 ),
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_selectedImage != null)
-                      Container(
-                        height: 150,
-                        width: double.infinity,
-                        margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          image: DecorationImage(
-                            image: FileImage(File(_selectedImage!.path)),
-                            fit: BoxFit.cover,
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Заголовок с стеклянным эффектом
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          margin: const EdgeInsets.only(bottom: 20),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            color: Colors.white.withOpacity(0.7),
+                            border: Border.all(color: Colors.white.withOpacity(0.9)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Добавить новое желание',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w600,
+                                fontSize: 18,
+                                color: _Colors.glassPrimary,
+                              ),
+                            ),
                           ),
                         ),
-                        child: Stack(
-                          children: [
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: CircleAvatar(
-                                backgroundColor: Colors.black54,
-                                radius: 16,
-                                child: IconButton(
-                                  icon: const Icon(Icons.close, size: 16),
-                                  color: Colors.white,
-                                  onPressed: () {
-                                    setDialogState(() {
-                                      _selectedImage = null;
-                                      imageUrlController.clear();
-                                    });
+
+                        // Индикатор обработки
+                        if (_isProcessingImage)
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              color: _Colors.glassPrimary.withOpacity(0.1),
+                            ),
+                            child: Row(
+                              children: [
+                                CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(_Colors.glassPrimary),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Text(
+                                    'Обрабатываем изображение...',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      color: _Colors.glassPrimary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        if (_selectedImage != null)
+                          Container(
+                            height: 150,
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              image: DecorationImage(
+                                image: FileImage(File(_selectedImage!.path)),
+                                fit: BoxFit.cover,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 15,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                            child: Stack(
+                              children: [
+                                Positioned(
+                                  top: 8,
+                                  right: 8,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.6),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: IconButton(
+                                      icon: const Icon(Icons.close, size: 16),
+                                      color: Colors.white,
+                                      onPressed: () {
+                                        setDialogState(() {
+                                          _selectedImage = null;
+                                          _base64Image = null;
+                                          imageUrlController.clear();
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 8,
+                                  left: 8,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.6),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      'Изображение из галереи',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontFamily: 'Poppins',
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else if (imageUrlController.text.isNotEmpty)
+                          Container(
+                            height: 150,
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              image: DecorationImage(
+                                image: NetworkImage(imageUrlController.text),
+                                fit: BoxFit.cover,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 15,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        // Кнопки выбора изображения
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            color: Colors.white.withOpacity(0.6),
+                            border: Border.all(color: Colors.white.withOpacity(0.8)),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _GlassButton(
+                                  onPressed: _isProcessingImage ? null : () async {
+                                    final ImagePicker picker = ImagePicker();
+
+                                    if (await _isAndroid13OrHigher()) {
+                                      final status = await Permission.photos.request();
+                                      if (status.isGranted) {
+                                        final XFile? image = await picker.pickImage(
+                                          source: ImageSource.gallery,
+                                          maxWidth: 800,
+                                          maxHeight: 800,
+                                          imageQuality: 70, // Уменьшаем качество для экономии места
+                                        );
+                                        if (image != null) {
+                                          setDialogState(() {
+                                            _selectedImage = image;
+                                            imageUrlController.clear();
+                                          });
+                                        }
+                                      } else if (status.isPermanentlyDenied) {
+                                        _showPermissionSettingsDialog('доступу к галерее');
+                                      } else {
+                                        _showErrorSnackBar('Разрешение на доступ к галерее не предоставлено');
+                                      }
+                                    } else {
+                                      final status = await Permission.storage.request();
+                                      if (status.isGranted) {
+                                        final XFile? image = await picker.pickImage(
+                                          source: ImageSource.gallery,
+                                          maxWidth: 800,
+                                          maxHeight: 800,
+                                          imageQuality: 70,
+                                        );
+                                        if (image != null) {
+                                          setDialogState(() {
+                                            _selectedImage = image;
+                                            imageUrlController.clear();
+                                          });
+                                        }
+                                      } else if (status.isPermanentlyDenied) {
+                                        _showPermissionSettingsDialog('доступу к хранилищу');
+                                      } else {
+                                        _showErrorSnackBar('Разрешение на доступ к хранилищу не предоставлено');
+                                      }
+                                    }
                                   },
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.photo_library, color: _isProcessingImage ? Colors.grey : _Colors.glassPrimary),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Галерея',
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          color: _isProcessingImage ? Colors.grey : _Colors.glassPrimary,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _GlassButton(
+                                  onPressed: _isProcessingImage ? null : () async {
+                                    final ImagePicker picker = ImagePicker();
+                                    final status = await Permission.camera.request();
+                                    if (status.isGranted) {
+                                      final XFile? image = await picker.pickImage(
+                                        source: ImageSource.camera,
+                                        maxWidth: 800,
+                                        maxHeight: 800,
+                                        imageQuality: 70,
+                                      );
+                                      if (image != null) {
+                                        setDialogState(() {
+                                          _selectedImage = image;
+                                          imageUrlController.clear();
+                                        });
+                                      }
+                                    } else {
+                                      _showErrorSnackBar('Разрешение на камеру не предоставлено');
+                                    }
+                                  },
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.camera_alt, color: _isProcessingImage ? Colors.grey : _Colors.glassPrimary),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Камера',
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          color: _isProcessingImage ? Colors.grey : _Colors.glassPrimary,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Поля ввода
+                        _GlassInputField(
+                          controller: titleController,
+                          labelText: 'Название предмета',
+                          hintText: 'Введите название',
+                        ),
+                        const SizedBox(height: 16),
+                        _GlassInputField(
+                          controller: descriptionController,
+                          labelText: 'Описание',
+                          hintText: 'Введите описание предмета',
+                          maxLines: 2,
+                        ),
+                        const SizedBox(height: 16),
+                        _GlassInputField(
+                          controller: priceController,
+                          labelText: 'Цена (опционально)',
+                          hintText: '0.00',
+                          prefixText: '₽',
+                          keyboardType: TextInputType.numberWithOptions(decimal: true),
+                        ),
+                        const SizedBox(height: 16),
+                        _GlassInputField(
+                          controller: imageUrlController,
+                          labelText: 'Ссылка на товар (опционально)',
+                          suffixIcon: IconButton(
+                            icon: Icon(Icons.shuffle, color: _Colors.glassPrimary),
+                            onPressed: () {
+                              final randomIndex = (priority - 1) % defaultImages.length;
+                              setDialogState(() {
+                                imageUrlController.text = defaultImages[randomIndex];
+                                _selectedImage = null;
+                                _base64Image = null;
+                              });
+                            },
+                          ),
+                          onChanged: (value) {
+                            if (value.isNotEmpty) {
+                              setDialogState(() {
+                                _selectedImage = null;
+                                _base64Image = null;
+                              });
+                            }
+                          },
+                          hintText: '',
+                        ),
+
+                        if (_selectedImage != null)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            margin: const EdgeInsets.only(top: 8),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              color: _Colors.glassPrimary.withOpacity(0.1),
+                              border: Border.all(color: _Colors.glassPrimary.withOpacity(0.3)),
+                            ),
+                            child: Text(
+                              '✅ Изображение будет сохранено и доступно всем пользователям',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 12,
+                                color: _Colors.glassPrimary,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+
+                        const SizedBox(height: 16),
+
+                        // Приоритет
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            color: Colors.white.withOpacity(0.6),
+                            border: Border.all(color: Colors.white.withOpacity(0.8)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Приоритет',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: _Colors.glassPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(5, (index) {
+                                  return IconButton(
+                                    onPressed: () {
+                                      setDialogState(() {
+                                        priority = index + 1;
+                                      });
+                                    },
+                                    icon: Icon(
+                                      index < priority
+                                          ? Icons.star
+                                          : Icons.star_border,
+                                      color: _Colors.glassPrimary,
+                                      size: 32,
+                                    ),
+                                  );
+                                }),
+                              ),
+                              Center(
+                                child: Text(
+                                  '$priority из 5',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    color: _Colors.glassPrimary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Кнопки действий
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _GlassButton(
+                                onPressed: _isProcessingImage ? null : () => Navigator.pop(context),
+                                child: Text(
+                                  'Отмена',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    color: _isProcessingImage ? Colors.grey : _Colors.glassPrimary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                             ),
-                            Positioned(
-                              bottom: 8,
-                              left: 8,
+                            const SizedBox(width: 12),
+                            Expanded(
                               child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: Colors.black54,
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(16),
+                                  gradient: _isProcessingImage
+                                      ? const LinearGradient(colors: [Colors.grey, Colors.grey])
+                                      : const LinearGradient(
+                                    colors: [
+                                      _Colors.glassPrimary,
+                                      _Colors.glassSecondary,
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: _Colors.glassPrimary.withOpacity(0.3),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 5),
+                                    ),
+                                  ],
                                 ),
-                                child: Text(
-                                  'Локальное изображение',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontFamily: 'Poppins',
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(16),
+                                    onTap: _isProcessingImage ? null : () async {
+                                      if (titleController.text.isEmpty) {
+                                        _showErrorSnackBar('Пожалуйста, введите название');
+                                        return;
+                                      }
+
+                                      // Обработка цены (необязательная)
+                                      double? price;
+                                      if (priceController.text.isNotEmpty) {
+                                        price = double.tryParse(priceController.text);
+                                        if (price == null || price <= 0) {
+                                          _showErrorSnackBar('Пожалуйста, введите корректную цену');
+                                          return;
+                                        }
+                                      }
+                                      // Если цена не указана - price останется null
+
+                                      try {
+                                        String imageUrl;
+                                        String? base64Image;
+
+                                        // Если выбрано локальное изображение, конвертируем в Base64
+                                        if (_selectedImage != null) {
+                                          final base64 = await _convertImageToBase64(_selectedImage!);
+                                          if (base64 == null) {
+                                            _showErrorSnackBar('Не удалось обработать изображение');
+                                            return;
+                                          }
+                                          base64Image = base64;
+                                          imageUrl = 'base64://${_selectedImage!.name}'; // Заглушка для URL
+                                        }
+                                        // Если введена ссылка, используем её
+                                        else if (imageUrlController.text.isNotEmpty) {
+                                          imageUrl = imageUrlController.text.trim();
+                                        }
+                                        // Иначе используем стандартное изображение
+                                        else {
+                                          imageUrl = defaultImages[priority - 1];
+                                        }
+
+                                        final newWish = WishItem.createNew(
+                                          title: titleController.text.trim(),
+                                          description: descriptionController.text.trim(),
+                                          imageUrl: imageUrl,
+                                          price: price ?? 0.0, // Если цена null, используем 0.0
+                                          priority: priority,
+                                          addedBy: _auth.currentUser?.uid,
+                                          base64Image: base64Image,
+                                        );
+
+                                        await _firestoreService.addWishItem(newWish);
+
+                                        Navigator.pop(context);
+                                        _showSuccessSnackBar('«${newWish.title}» добавлен в вишлист!');
+                                      } catch (e) {
+                                        _showErrorSnackBar('Ошибка при добавлении: $e');
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                                      child: Center(
+                                        child: _isProcessingImage
+                                            ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                          ),
+                                        )
+                                            : Text(
+                                          'Добавить',
+                                          style: TextStyle(
+                                            fontFamily: 'Poppins',
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ],
                         ),
-                      )
-                    else if (imageUrlController.text.isNotEmpty)
-                      Container(
-                        height: 150,
-                        width: double.infinity,
-                        margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          image: DecorationImage(
-                            image: NetworkImage(imageUrlController.text),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.photo_library),
-                            label: const Text('Галерея'),
-                            onPressed: () async {
-                              final ImagePicker picker = ImagePicker();
-                              final status = await Permission.photos.request();
-                              if (status.isGranted) {
-                                final XFile? image = await picker.pickImage(
-                                  source: ImageSource.gallery,
-                                  maxWidth: 800,
-                                  maxHeight: 800,
-                                  imageQuality: 80,
-                                );
-                                if (image != null) {
-                                  setDialogState(() {
-                                    _selectedImage = image;
-                                    imageUrlController.clear();
-                                  });
-                                }
-                              } else {
-                                _showErrorSnackBar(
-                                    'Разрешение на доступ к галерее не предоставлено');
-                              }
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.camera_alt),
-                            label: const Text('Камера'),
-                            onPressed: () async {
-                              final ImagePicker picker = ImagePicker();
-                              final status = await Permission.camera.request();
-                              if (status.isGranted) {
-                                final XFile? image = await picker.pickImage(
-                                  source: ImageSource.camera,
-                                  maxWidth: 800,
-                                  maxHeight: 800,
-                                  imageQuality: 80,
-                                );
-                                if (image != null) {
-                                  setDialogState(() {
-                                    _selectedImage = image;
-                                    imageUrlController.clear();
-                                  });
-                                }
-                              } else {
-                                _showErrorSnackBar(
-                                    'Разрешение на камеру не предоставлено');
-                              }
-                            },
-                          ),
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-
-                    TextFormField(
-                      controller: titleController,
-                      decoration: const InputDecoration(
-                        labelText: 'Название предмета*',
-                        border: OutlineInputBorder(),
-                        hintText: 'Введите название',
-                      ),
-                      style: const TextStyle(fontFamily: 'Poppins'),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: descriptionController,
-                      decoration: const InputDecoration(
-                        labelText: 'Описание*',
-                        border: OutlineInputBorder(),
-                        hintText: 'Введите описание предмета',
-                      ),
-                      style: const TextStyle(fontFamily: 'Poppins'),
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: priceController,
-                      decoration: const InputDecoration(
-                        labelText: 'Цена*',
-                        prefixText: '₽',
-                        border: OutlineInputBorder(),
-                        hintText: '0.00',
-                      ),
-                      style: const TextStyle(fontFamily: 'Poppins'),
-                      keyboardType:
-                      TextInputType.numberWithOptions(decimal: true),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: imageUrlController,
-                      decoration: InputDecoration(
-                        labelText: 'Ссылка на изображение (опционально)',
-                        border: const OutlineInputBorder(),
-                        hintText: 'Или введите ссылку на изображение',
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.shuffle),
-                          onPressed: () {
-                            final randomIndex =
-                                (priority - 1) % defaultImages.length;
-                            setDialogState(() {
-                              imageUrlController.text =
-                              defaultImages[randomIndex];
-                              _selectedImage = null;
-                            });
-                          },
-                        ),
-                      ),
-                      style: const TextStyle(fontFamily: 'Poppins'),
-                      onChanged: (value) {
-                        if (value.isNotEmpty) {
-                          setDialogState(() {
-                            _selectedImage = null;
-                          });
-                        }
-                      },
-                    ),
-
-                    if (_selectedImage != null)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(top: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.blue[50],
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue[100]!),
-                        ),
-                        child: Text(
-                          '⚠️ Локальное изображение будет видно только вам. Для общего доступа используйте ссылку.',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 12,
-                            color: Colors.blue[800],
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-
-                    const SizedBox(height: 16),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Приоритет',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(5, (index) {
-                            return IconButton(
-                              onPressed: () {
-                                setDialogState(() {
-                                  priority = index + 1;
-                                });
-                              },
-                              icon: Icon(
-                                index < priority
-                                    ? Icons.star
-                                    : Icons.star_border,
-                                color: Theme.of(context).colorScheme.primary,
-                                size: 32,
-                              ),
-                            );
-                          }),
-                        ),
-                        Center(
-                          child: Text(
-                            '$priority из 5',
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              color: Theme.of(context).colorScheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(
-                    'Отмена',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withOpacity(0.6),
-                    ),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    if (titleController.text.isEmpty) {
-                      _showErrorSnackBar('Пожалуйста, введите название');
-                      return;
-                    }
-
-                    if (priceController.text.isEmpty) {
-                      _showErrorSnackBar('Пожалуйста, введите цену');
-                      return;
-                    }
-
-                    final price = double.tryParse(priceController.text);
-                    if (price == null || price <= 0) {
-                      _showErrorSnackBar('Пожалуйста, введите корректную цену');
-                      return;
-                    }
-
-                    try {
-                      String imageUrl;
-
-                      if (_selectedImage != null) {
-                        imageUrl = defaultImages[priority - 1];
-                        _showInfoSnackBar(
-                            'Локальное изображение заменено на стандартное для совместимости');
-                      }
-                      else if (imageUrlController.text.isNotEmpty) {
-                        imageUrl = imageUrlController.text.trim();
-                      }
-                      else {
-                        imageUrl = defaultImages[priority - 1];
-                      }
-
-                      final newWish = WishItem.createNew(
-                        title: titleController.text.trim(),
-                        description: descriptionController.text.trim(),
-                        price: price,
-                        imageUrl: imageUrl,
-                        priority: priority,
-                        addedBy: _auth.currentUser?.uid,
-                      );
-
-                      await _firestoreService.addWishItem(newWish);
-
-                      Navigator.pop(context);
-                      _showSuccessSnackBar(
-                          '«${newWish.title}» добавлен в вишлист!');
-                    } catch (e) {
-                      _showErrorSnackBar('Ошибка при добавлении: $e');
-                    }
-                  },
-                  child: Text(
-                    'Добавить',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
             );
           },
         );
@@ -520,8 +813,9 @@ class _WishlistPageState extends State<WishlistPage> {
           message,
           style: const TextStyle(fontFamily: 'Poppins'),
         ),
-        backgroundColor: Colors.blue,
+        backgroundColor: _Colors.glassPrimary,
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
     );
   }
@@ -553,7 +847,7 @@ class _WishlistPageState extends State<WishlistPage> {
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(20),
         ),
       ),
     );
@@ -568,6 +862,7 @@ class _WishlistPageState extends State<WishlistPage> {
         ),
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
     );
   }
@@ -599,7 +894,8 @@ class _WishlistPageState extends State<WishlistPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF8F9FA),
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: const Text(
           'Общий Вишлист',
@@ -607,25 +903,63 @@ class _WishlistPageState extends State<WishlistPage> {
             fontFamily: 'Poppins',
             fontWeight: FontWeight.w700,
             fontSize: 24,
+            color: Colors.white,
           ),
         ),
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.group),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => const WishlistManagerPage()),
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(30),
+              bottomRight: Radius.circular(30),
             ),
-            tooltip: 'Управление вишлистами',
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                _Colors.glassPrimary,
+                _Colors.glassSecondary,
+              ],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _Colors.glassPrimary.withOpacity(0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-            tooltip: 'Выйти',
+        ),
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.2),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.group, color: Colors.white),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const WishlistManagerPage()),
+              ),
+              tooltip: 'Управление вишлистами',
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.2),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.logout, color: Colors.white),
+              onPressed: _logout,
+              tooltip: 'Выйти',
+            ),
           ),
         ],
       ),
@@ -633,43 +967,28 @@ class _WishlistPageState extends State<WishlistPage> {
         stream: _firestoreService.getSharedWishItems(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 64,
-                    color: Colors.red[300],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Ошибка загрузки',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.red[700],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Попробуйте перезайти в приложение',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            );
+            return _buildErrorState(snapshot.error);
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
+            return Center(
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(_Colors.glassPrimary),
+                ),
+              ),
             );
           }
 
@@ -677,73 +996,98 @@ class _WishlistPageState extends State<WishlistPage> {
 
           return Column(
             children: [
+              // Заголовок с статистикой
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
+                padding: const EdgeInsets.fromLTRB(20, 80, 20, 30),
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: const BoxDecoration(
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(40),
+                    bottomRight: Radius.circular(40),
+                  ),
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Theme.of(context).colorScheme.primaryContainer,
-                      Theme.of(context).colorScheme.secondaryContainer,
+                      _Colors.glassPrimary,
+                      _Colors.glassSecondary,
                     ],
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 20,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
                 ),
                 child: Column(
                   children: [
-                    Text(
-                      'Общий вишлист',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(25),
+                        color: Colors.white.withOpacity(0.2),
+                        border: Border.all(color: Colors.white.withOpacity(0.3)),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${wishItems.length} предметов • ₽${_calculateTotalPrice(wishItems).toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    StreamBuilder<List<String>>(
-                      stream: _firestoreService.getAccessibleWishlistIds(),
-                      builder: (context, accessibleSnapshot) {
-                        if (accessibleSnapshot.hasData) {
-                          final accessibleIds = accessibleSnapshot.data!;
-                          final connectedCount = accessibleIds.length;
+                      child: Column(
+                        children: [
+                          Text(
+                            'Общий вишлист',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${wishItems.length} предметов • ₽${_calculateTotalPrice(wishItems).toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          StreamBuilder<List<String>>(
+                            stream: _firestoreService.getAccessibleWishlistIds(),
+                            builder: (context, accessibleSnapshot) {
+                              if (accessibleSnapshot.hasData) {
+                                final accessibleIds = accessibleSnapshot.data!;
+                                final connectedCount = accessibleIds.length;
 
-                          return Column(
-                            children: [
-                              if (_calculatePurchasedCount(wishItems) > 0)
-                                Text(
-                                  'Куплено: ${_calculatePurchasedCount(wishItems)}',
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 14,
-                                    color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
-                                  ),
-                                ),
-                              if (connectedCount > 0)
-                                Text(
-                                  'Подключено к $connectedCount вишлистам',
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 12,
-                                    color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
-                                  ),
-                                ),
-                            ],
-                          );
-                        }
-                        return const SizedBox();
-                      },
+                                return Column(
+                                  children: [
+                                    if (_calculatePurchasedCount(wishItems) > 0)
+                                      Text(
+                                        'Куплено: ${_calculatePurchasedCount(wishItems)}',
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 14,
+                                          color: Colors.white.withOpacity(0.8),
+                                        ),
+                                      ),
+                                    if (connectedCount > 0)
+                                      Text(
+                                        'Подключено к $connectedCount вишлистам',
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 12,
+                                          color: Colors.white.withOpacity(0.8),
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              }
+                              return const SizedBox();
+                            },
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -753,15 +1097,18 @@ class _WishlistPageState extends State<WishlistPage> {
                 child: wishItems.isEmpty
                     ? const _EmptyState()
                     : ListView.builder(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(20),
                   itemCount: wishItems.length,
                   itemBuilder: (context, index) {
                     final item = wishItems[index];
-                    return WishItemCard(
-                      item: item,
-                      onTap: () => _openItemDetail(context, item),
-                      onDelete: () => _deleteWishItem(item.id),
-                      showAddedBy: true,
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: WishItemCard(
+                        item: item,
+                        onTap: () => _openItemDetail(context, item),
+                        onDelete: () => _deleteWishItem(item.id),
+                        showAddedBy: true,
+                      ),
                     );
                   },
                 ),
@@ -770,11 +1117,91 @@ class _WishlistPageState extends State<WishlistPage> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addNewWish,
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-        child: const Icon(Icons.add, size: 28),
+      floatingActionButton: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        child: FloatingActionButton(
+          onPressed: _addNewWish,
+          backgroundColor: Colors.white,
+          foregroundColor: _Colors.glassPrimary,
+          elevation: 10,
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [
+                  _Colors.glassPrimary,
+                  _Colors.glassSecondary,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: const Icon(Icons.add, size: 28, color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState(Object? error) {
+    String errorMessage = 'Произошла ошибка';
+
+    if (error is FirebaseException) {
+      switch (error.code) {
+        case 'permission-denied':
+          errorMessage = 'Нет доступа к данным. Проверьте настройки безопасности.';
+          break;
+        case 'unavailable':
+          errorMessage = 'Нет подключения к интернету';
+          break;
+        default:
+          errorMessage = 'Ошибка Firebase: ${error.message}';
+      }
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Colors.red[300],
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Ошибка загрузки',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: _Colors.glassPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              errorMessage,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {});
+              },
+              child: Text(
+                'Попробовать снова',
+                style: TextStyle(fontFamily: 'Poppins'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -786,35 +1213,166 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.favorite_border_rounded,
-            size: 80,
-            color: Colors.grey[400],
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Container(
+          padding: const EdgeInsets.all(30),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(30),
+            color: Colors.white.withOpacity(0.8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+            border: Border.all(color: Colors.white.withOpacity(0.9)),
           ),
-          const SizedBox(height: 20),
-          Text(
-            'Вишлист пуст',
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[600],
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _Colors.glassPrimary.withOpacity(0.1),
+                  border: Border.all(color: _Colors.glassPrimary.withOpacity(0.3)),
+                ),
+                child: Icon(
+                  Icons.favorite_border_rounded,
+                  size: 60,
+                  color: _Colors.glassPrimary,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Вишлист пуст',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: _Colors.glassPrimary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Нажмите + чтобы добавить первый предмет',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            'Нажмите + чтобы добавить первый предмет',
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 14,
-              color: Colors.grey[500],
-            ),
-            textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+}
+
+// Кастомные цвета для стеклянного дизайна
+class _Colors {
+  static const glassPrimary = Color(0xFF6366F1);
+  static const glassSecondary = Color(0xFF8B5CF6);
+  static const glassSurface = Color(0xFFF8FAFC);
+}
+
+// Стеклянная кнопка
+class _GlassButton extends StatelessWidget {
+  final VoidCallback? onPressed;
+  final Widget child;
+
+  const _GlassButton({
+    required this.onPressed,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: Colors.white.withOpacity(0.6),
+        border: Border.all(color: Colors.white.withOpacity(0.8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
           ),
         ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onPressed,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Стеклянное поле ввода
+class _GlassInputField extends StatelessWidget {
+  final TextEditingController controller;
+  final String labelText;
+  final String hintText;
+  final String? prefixText;
+  final int? maxLines;
+  final TextInputType? keyboardType;
+  final Widget? suffixIcon;
+  final ValueChanged<String>? onChanged;
+
+  const _GlassInputField({
+    required this.controller,
+    required this.labelText,
+    required this.hintText,
+    this.prefixText,
+    this.maxLines = 1,
+    this.keyboardType,
+    this.suffixIcon,
+    this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: Colors.white.withOpacity(0.6),
+        border: Border.all(color: Colors.white.withOpacity(0.8)),
+      ),
+      child: TextFormField(
+        controller: controller,
+        style: const TextStyle(fontFamily: 'Poppins', color: Colors.black87),
+        decoration: InputDecoration(
+          labelText: labelText,
+          hintText: hintText,
+          prefixText: prefixText,
+          suffixIcon: suffixIcon,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          labelStyle: TextStyle(
+            fontFamily: 'Poppins',
+            color: _Colors.glassPrimary,
+            fontWeight: FontWeight.w500,
+          ),
+          hintStyle: const TextStyle(
+            fontFamily: 'Poppins',
+            color: Colors.grey,
+          ),
+        ),
+        maxLines: maxLines,
+        keyboardType: keyboardType,
+        onChanged: onChanged,
       ),
     );
   }

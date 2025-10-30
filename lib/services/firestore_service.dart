@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:app_wishlist/models/wish_item.dart';
 import 'package:app_wishlist/models/user_profile.dart';
-
+import 'dart:async';
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -131,6 +131,8 @@ class FirestoreService {
 
   // ОСНОВНОЙ МЕТОД: Получение общих вишлистов - УПРОЩЕННАЯ ВЕРСИЯ
 
+  // ОСНОВНОЙ МЕТОД: Получение общих вишлистов - РЕАЛЬНОЕ ВРЕМЯ
+  // ОСНОВНОЙ МЕТОД: Получение общих вишлистов - РЕАЛЬНОЕ ВРЕМЯ
   Stream<List<WishItem>> getSharedWishItems() {
     final currentUser = _auth.currentUser;
     if (currentUser == null) {
@@ -145,7 +147,7 @@ class FirestoreService {
         .where('sharedWithId', isEqualTo: currentUser.uid)
         .where('isActive', isEqualTo: true)
         .snapshots()
-        .asyncMap((sharedSnapshot) async {
+        .asyncExpand((sharedSnapshot) {
       try {
         final sharedWishlists = sharedSnapshot.docs;
         final accessibleUserIds = <String>{currentUser.uid};
@@ -159,22 +161,40 @@ class FirestoreService {
         }
 
         if (accessibleUserIds.isEmpty) {
-          return <WishItem>[];
+          return Stream.value(<WishItem>[]);
         }
 
-        // Получаем предметы одним запросом
-        final itemsSnapshot = await _firestore
+        // Используем snapshots() для реального времени
+        return _firestore
             .collection('wish_items')
             .where('addedBy', whereIn: accessibleUserIds.toList())
             .orderBy('createdAt', descending: true)
-            .get();
-
-        return itemsSnapshot.docs
-            .map((doc) => WishItem.fromMap(doc.data(), doc.id))
-            .toList();
+            .snapshots()
+            .map((itemsSnapshot) {
+          return itemsSnapshot.docs
+              .map((doc) {
+            try {
+              return WishItem.fromMap(doc.data(), doc.id);
+            } catch (e) {
+              print('❌ Ошибка преобразования WishItem ${doc.id}: $e');
+              // Возвращаем заглушку вместо ошибки
+              return WishItem(
+                id: doc.id,
+                title: 'Ошибка загрузки',
+                description: '',
+                price: 0,
+                imageUrl: '',
+                priority: 1,
+                createdAt: DateTime.now(),
+                addedBy: 'unknown',
+              );
+            }
+          })
+              .toList();
+        });
       } catch (e) {
         print('❌ Ошибка в getSharedWishItems: $e');
-        return <WishItem>[];
+        return Stream.value(<WishItem>[]);
       }
     });
   }
